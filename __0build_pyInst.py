@@ -1,0 +1,74 @@
+from subprocess import call
+from datetime import datetime
+from time import sleep
+
+def comile():
+    curdate = datetime.now().strftime("%Y, %m, %d, ")
+    fileVersion = "        StringStruct(u'FileVersion', u'build%s" % curdate.replace(', ', '') + "'),\n"
+    prodVersion = "        StringStruct(u'ProductVersion', u'%s" % curdate + "attempt" + "')])\n"
+
+    build=None
+    lines=[]
+
+    # чтение\разбор
+    try:
+        with open('version.txt','r') as file:
+            for line in file.readlines():
+                if "fileversion" in line.lower():
+                    lines.append(fileVersion)
+                elif "productversion" in line.lower():
+                    if build == None:
+                        buildStr = '# build=' + curdate.replace(', ', '') + ' ; 0\n'
+                        prodVersion = prodVersion.replace('attempt', '0')
+
+                    lines.append(prodVersion)
+                elif "# build" in line:
+                    build=line.split('=')[1].split(' ; ')
+                    build[1]=str(int(build[1])+1)
+                    buildStr='# build='+build[0] +" ; " + build[1] +'\n' #build, attempt
+                    prodVersion=prodVersion.replace('attempt',build[1])
+                else:
+                    lines.append(line)
+    except Exception as e:
+        input("can't read version.txt: %s" %e)
+        return
+
+
+    lines1 = []
+    try:
+        with open('__init__.py', 'r') as file:
+            for line in file.readlines():
+                if "__version__" in line:
+                    lines1.append('__version__ = "'+curdate.replace(', ','.')+build[1]+'"')
+    except Exception as e:
+        input("can't read __init__.py: %s" % e)
+        return
+
+    # запись
+    try:
+        with open('version.txt','w') as file:
+            file.write(buildStr)
+            file.writelines(lines)
+
+    except Exception as e:
+        input("can't write version.txt: %s" %e)
+        return
+
+    try:
+        with open('__init__.py','w') as file:
+            file.writelines(lines1)
+
+    except Exception as e:
+        input("can't write __init__.py: %s" %e)
+        return
+
+    # сборка
+    try:
+        call("pyinstaller -F --version-file=version.txt AppWatch.py --workpath ./ --hidden-import=win32timezone --clean")
+    except Exception as e:
+        input("can't call pyinstaller: %s" %e)
+        return
+
+comile()
+print('Done!')
+sleep(2)

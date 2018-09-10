@@ -1,0 +1,29 @@
+# build=20180627 ; 132
+VSVersionInfo(
+  ffi=FixedFileInfo(
+    filevers=(1, 0, 0, 0),
+    prodvers=(1, 0, 0, 0),
+    mask=0x3f,
+    flags=0x0,
+    OS=0x40004,
+    fileType=0x1,
+    subtype=0x0,
+    date=(0, 0)
+    ),
+  kids=[
+    StringFileInfo(
+      [
+    StringTable(
+        u'040904B0',
+        [StringStruct(u'CompanyName', u'JusTopich'),
+        StringStruct(u'FileDescription', u'WatchDog for Windows apps'),
+        StringStruct(u'FileVersion', u'build20180910'),
+        StringStruct(u'InternalName', u'AppWatch'),
+        StringStruct(u'LegalCopyright', u'JusTopich'),
+        StringStruct(u'OriginalFilename', u'AppWatch.py'),
+        StringStruct(u'ProductName', u'AppWatch'),
+        StringStruct(u'ProductVersion', u'2018, 09, 10, 132')])
+    ]), 
+    VarFileInfo([VarStruct(u'Translation', [1049, 1200])])
+  ]
+)
