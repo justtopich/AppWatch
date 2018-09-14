@@ -4,6 +4,7 @@ import re, sys, time, os
 
 
 homeDir = sys.argv[0][:sys.argv[0].replace('\\', '/').rfind('/')+1]
+devmod = False
 
 # Загружает конфиг
 try:
@@ -34,15 +35,13 @@ def writeSection(section, params):
     config.optionxform = lowcaseMe  # возращаем предопределённый метод назад
     configWrite()
     return 1
-
-# пример конфига
 default={
     "server" : {
         "// This Server info": "",
         "localName": "Pantsu Server",
         "localIp": "0.0.0.0",
-        "Notify": "mailer",
-        "// Notification service.  mailer or Slack": ""
+        "Notify": "email",
+        "// Notification service.  email or Slack": ""
     },
     "service": {
         "name": "AppWatchSvc",
@@ -52,9 +51,9 @@ default={
     "slack" : {
         "url": "YOUR_WEBHOOK_URL_HERE",
     },
-    "mailer" : {
+    "email" : {
         "userMail": "admin@pantsumail.ru",
-        "server": "localhost",
+        "server": "smtp.pantsumail.ru",
         "port": "587",
         "// Try 587 if 465 not work": "",
         "user": "username",
@@ -62,7 +61,7 @@ default={
         "fromHeader": "Pantsu Alarm <bot@pantsumail.ru>"
     },
     "taskList" : {
-        "intervalMin": "10",
+        "intervalCheckMin": "10",
         "active": "1",
         "1": "diskUsage",
         "2": "MyApp;",
@@ -75,15 +74,19 @@ default={
         "critical": "10"
     },
     "myApp" : {
+        "doRestart": "true",
+        "// false will only notify": "",
         "url": "https://myHost.ru",
         "path": "C:\Apps\MyApp",
         "exe": "myApp.exe",
+        "// What must be running": "",
         "exeKey": "/247 /hidegui",
         "// Keys for starting exe": "",
         "startApp": "",
         "// If not set, will start <exe> param": ""
     },
     "myHttpServer" : {
+        "doRestart": "true",
         "url": "http://127.0.1.1:7252",
         "path": "C:\path",
         "exe": "MyServer.exe",
@@ -99,19 +102,30 @@ default={
     }
 }
 
-# Создаёт секции если их нет
+# пример конфига
+
+# Создаёт секции если их нет. Потом в рекурсию загнать можно
 try:
     used=0
-    for i in ['server', 'service', 'slack', 'mailer', 'taskList', 'logging']:
-        if not config.has_section(i):
-            used=writeSection(i,default[i])
-            if i == 'taskList':
-                used = writeSection('diskUsage', default['diskUsage'])
-                used = writeSection('myApp', default['myApp'])
-                used = writeSection('myHttpServer', default['myHttpServer'])
+    for i in ['server', 'service', 'slack', 'email', 'taskList', 'logging']:
+        try:
+            if not config.has_section(i):
+                print('Create new section [%s]' %i)
+                used=writeSection(i,default[i])
+                if i == 'taskList':
+                    for y in ['diskUsage','myApp','myHttpServer']:
+                        try:
+                            used = writeSection(y, default[y])
+                        except Exception as e:
+                            print(e)
+                            continue
+        except Exception as e:
+            print(e)
+            continue
+
 
     if used==1:
-        print("WARNING: Были созданы новые секции в файле конфигурации. "
+        print("WARNING: Были созданы новые секции в файле конфигурации "
               "Для их действия запустите коннектор заново.")
         time.sleep(3)
         raise SystemExit(1)
@@ -120,7 +134,9 @@ except Exception as e:
     time.sleep(3)
     raise SystemExit(1)
 
-taskList = jobList = sendedMail = []
+taskList = []
+jobList = []
+sendedMail = []
 diskUsage = 0
 
 # Check logging
@@ -145,7 +161,7 @@ except Exception as e:
 
 
 # create logger
-logFile = 'AppWatch.log'
+logFile = homeDir+'AppWatch.log'
 log_formatter = logging.Formatter('%(asctime)s %(levelname)s: %(message)s',
                                       datefmt = '%Y-%m-%d %H:%M:%S')
 myHandler = RotatingFileHandler(logFile, maxBytes = logSize * 1024, backupCount = logCount, delay = 0)
@@ -162,9 +178,9 @@ cons_log.addHandler(consoleHandler)
 
 # check general settings
 try:
-    localName = (config.get("server", "localName"))
-    localIp = (config.get("server", "localIp"))
-    noify = (config.get("server", "notify"))
+    localName = config.get("server", "localName")
+    localIp = config.get("server", "localIp")
+    noify = config.get("server", "notify").lower()
     log.info("Local server is %s (%s)" %(localIp,localName))
 except Exception as e:
     log.error("%s" % e)
@@ -173,7 +189,7 @@ except Exception as e:
 # check tasks
 try:
     active = config.getint('taskList', "active")
-    intervalMin = config.getint('taskList', "intervalmin") * 60
+    intervalCheckMin = config.getint('taskList', "intervalCheckMin") * 60
     log.info("Задано %s заданий" % active)
     if active <= 0:  # можно было бы и параметры проверить, но грамоздить ступеньки...
         log.error("Нет заданий для выполнения. Остановка приложения.")
@@ -199,8 +215,8 @@ except Exception as e:
 for task in taskList:
     if task == 'diskUsage':
         try:
-            diskWarn = int(config.get('diskUsage', "Warning"))
-            critFree = int(config.get('diskUsage', "Critical"))
+            diskWarn = config.getint('diskUsage', "Warning")
+            critFree = config.getint('diskUsage', "Critical")
             pathUsage = config.get('diskUsage', "path")
             pathUsage = pathUsage.replace('\\', '/') + '/'
             log.info("Задан diskUsage. Папка: %s. Лимит: %s GB" % (pathUsage, diskWarn))
@@ -216,32 +232,30 @@ for task in taskList:
         jobListTmp.append(config.get(task, "url"))
         jobListTmp.append(config.get(task, "Exe"))
         jobListTmp.append(config.get(task, "ExeKey"))
-        path = config.get(task, "path")
-        path = path.replace('\\', '/') + '/'
-        jobListTmp.append(path)
-        startApp = config.get(task, "startApp")
-        startApp = startApp.replace('\\', '/')
-        jobListTmp.append(startApp)
+        jobListTmp.append(config.get(task, "path").replace('\\', '/') + '/')
+        jobListTmp.append(config.get(task, "startApp").replace('\\', '/'))
+        jobListTmp.append(config.getboolean(task, "doRestart"))
         jobList.append(tuple(jobListTmp))
     except Exception as e:
         log.error("Задание " + task + " отклонено. Проверьте параметры: %s" % e)
         raise SystemExit(1)
 
-# check mailer settings
-if noify == 'mailer':
+# check email settings
+if noify == 'email':
     try:
-        userMail = (config.get("mailer", "userMail"))
-        serverMail = (config.get("mailer", "server"))
-        portMail = (config.getint("mailer", "Port"))
-        pechkin = (config.get("mailer", "user"))
-        passMail = (config.get("mailer", "password"))
-        headMail = (config.get("mailer", "fromheader"))
+        userMail = config.get("email", "userMail")
+        serverMail = config.get("email", "server")
+        portMail = config.getint("email", "Port")
+        pechkin = config.get("email", "user")
+        passMail = config.get("email", "password")
+        headMail = config.get("email", "fromheader")
         log.debug("Адрес почты отправителя " + pechkin)
     except Exception as e:
         log.error("Проверьте параметры почты: %s" % e)
         raise SystemExit(1)
-    check = re.findall(r'\w+@\w+.\w+', userMail) # проверяем правильность почты и убираем пробелы
-    if check:
+    # проверяем правильность почты и убираем пробелы
+
+    if re.findall(r'\w+@\w+.\w+', userMail):
         log.debug("Адрес почты получателя " + userMail)
     else:
         log.error("Неправильный адрес почты userMail.")
@@ -255,7 +269,7 @@ elif noify == 'slack':
         log.error('Bad notify URL')
         raise SystemExit(1)
 else:
-    log.error("use <mailer> or <slack> for noify")
+    log.error("use <email> or <slack> for Notify parameter")
     raise SystemExit(1)
 
 
@@ -271,4 +285,4 @@ def get_svc_params():
         time.sleep(3)
         raise SystemExit(1)
 
-del i, level, task, check, logFile, logSize, logCount, default
+del i, level, task, logFile, logSize, logCount, default

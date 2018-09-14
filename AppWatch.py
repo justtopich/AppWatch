@@ -13,8 +13,10 @@ import win32service
 import win32serviceutil
 import servicemanager
 from conf import *
+from __init__ import __version__
 
 svcParams = get_svc_params()
+# devmod = True
 
 class AppServerSvc(win32serviceutil.ServiceFramework):
     _svc_name_ = svcParams[0]
@@ -32,15 +34,17 @@ class AppServerSvc(win32serviceutil.ServiceFramework):
 
     def SvcDoRun(self):
         rc = None
-        import connector
+        import inspector
         while rc != win32event.WAIT_OBJECT_0:
             time.sleep(1)
             rc = win32event.WaitForSingleObject(self.hWaitStop, 4000)
-        connector.shutdown_me(1, '')
+        inspector.shutdown_me(1, '')
 
 if __name__ == "__main__":
-    # print('!#RUNING IN DEVELOPER MODE')
-    # sys.argv.append('run') # only debug mode
+    if devmod == True:
+        print('!#RUNING IN DEVELOPER MODE')
+        sys.argv.append('run') # only debug mode
+        log.setLevel(int(logging.DEBUG))
     try:
         if len(sys.argv) == 1:
             servicemanager.Initialize()
@@ -66,3 +70,4 @@ if __name__ == "__main__":
               ' install : установка службы windows\n'
               ' remove : удалить службу windows\n'
               ' update: обновить службу windows\n')
+        time.sleep(2)
