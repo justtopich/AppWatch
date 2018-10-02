@@ -1,6 +1,6 @@
 ﻿####################################
 #
-# AppWatch. 20180910
+# AppWatch. 20181002
 #
 # Создание\удаление windows службы. Обработка ключей консоли.
 # Запуск через службу\консоль.
@@ -44,7 +44,7 @@ if __name__ == "__main__":
     if devmod == True:
         print('!#RUNING IN DEVELOPER MODE')
         sys.argv.append('run') # only debug mode
-        log.setLevel(int(logging.DEBUG))
+        log.setLevel(10)
     try:
         if len(sys.argv) == 1:
             servicemanager.Initialize()

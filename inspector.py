@@ -5,13 +5,14 @@ Delete .cfg file and run script to create example configuration.
 
 from time import sleep
 from threading import Thread
-from subprocess import Popen, PIPE, CREATE_NEW_CONSOLE
+from subprocess import Popen, PIPE, CREATE_NEW_CONSOLE, DEVNULL
 import requests, smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from json import dumps
 from __init__ import __version__
 import signal, shutil
+import traceback
 
 
 # ловит ctrl-C. Останавливает модули в нужном порядке
@@ -68,7 +69,7 @@ def process_inspector ():
     def proc_run(app):
         # можно использовать | find
         conv = Popen('taskList /svc /fi "IMAGENAME eq ' + exe + '" /nh', shell=True, encoding='cp866',
-                     stdout=PIPE, stderr=PIPE)
+                     stdout=PIPE, stderr=PIPE, stdin=DEVNULL)
         stdout = str(conv.communicate())
         result = stdout.split()[0].split("\\n")[-1]
         return result == exe
@@ -76,57 +77,62 @@ def process_inspector ():
 
     log.debug("process_inspector started")
     while True:
-        for job in jobList:
-            app = job[0]
-            url = str(job[1])
-            exe = job[2].lower()
-            exeKey = job[3]
-            path = job[4]
-            launchApp = job[5].lower()
-            launch = job[6]
-            status = 0
-            if launchApp == "" or launchApp == 'none':
-                launchApp = path + exe
-
-            if proc_run(app)==True:
-                log.debug("Найден процесс " + app +" Запрос статуса.")
-                try:
-                    res = requests.get(url, timeout = 10)
-                    if res.status_code!=200:
-                        raise Exception("Server return status %s" %res.status_code)
-                    log.info("Процесс " + app + " работает.")
-                    continue
-                except Exception as e:
-                    status = 1
-                    data = "Процесс %s не отвечает или вернул не верный статус %s" % (app, e)
-                    log.warning(data)
-                    body = 'Капитан! На корабле %s взбунтовал матрос %s!\nIP адрес сервера: %s\n' \
-                           % (localName, localIp, app)
-
-                if status != 0 and launch is True:
-                    status = 0
+        try:
+            for job in jobList:
+                app = job[0]
+                url = str(job[1])        
+                exe = job[2].lower()
+                exeKey = job[3]
+                path = job[4]
+                launchApp = job[5].lower()
+                launch = job[6]
+                status = 0     
+                if launchApp == "" or launchApp == 'none':
+                    launchApp = path + exe
+                
+                if proc_run(app)==True:
+                    log.debug("Найден процесс " + app +" Запрос статуса.")
                     try:
-                        Popen('TASKKILL /f /im ' + exe, shell=True, stdout=PIPE, stderr=PIPE)
-                        while proc_run(app)==True:
-                            sleep(1)
+                        res = requests.get(url, timeout = 10)
+                        if res.status_code!=200:
+                            raise Exception("Server return status %s" %res.status_code)
+                        log.info("Процесс " + app + " работает.")
+                        continue
                     except Exception as e:
-                        data = 'Не удалось перезапустить процесс: %s\n' %e
-                        log.error(data)
-                        status = 2
+                        status = 1
+                        data = "Процесс %s не отвечает или вернул не верный статус %s" % (app, e)
+                        log.warning(data)
+                        body = 'Капитан! На корабле %s взбунтовал матрос %s!\nIP адрес сервера: %s\n' \
+                               % (localName, localIp, app)
 
-                    if status == 0:
-                        log.debug("Запуск приложения %s (%s)" % (exe, launchApp))
+                    if status != 0 and launch is True:
+                        status = 0
                         try:
-                            os.system('START cmd /c "' + launchApp + '" ' + exeKey)  # исп. другой метод
-                            log.info("Успешный перезапуск " + app)
-                            data += '\nНо он был успешно перезапущен\n'
+                            Popen('TASKKILL /f /im ' + exe, shell=True, stdout=PIPE, stderr=PIPE)
+                            while proc_run(app)==True:
+                                sleep(1)
                         except Exception as e:
-                            data = "Не удалось перезапусть процесс: %s (%s): %s\n" % (exe, launchApp, e)
+                            data = 'Не удалось перезапустить процесс: %s\n' %e
                             log.error(data)
+                            status = 2
 
-                    body += data
-                send_notify(app, body)
-        sleep(intervalCheckMin)
+                        if status == 0:
+                            log.debug("Запуск приложения %s (%s)" % (exe, launchApp))
+                            try:
+                                os.system('START cmd /c "' + launchApp + '" ' + exeKey)  # исп. другой метод
+                                log.info("Успешный перезапуск " + app)
+                                data += '\nНо он был успешно перезапущен\n'
+                            except Exception as e:
+                                data = "Не удалось перезапусть процесс: %s (%s): %s\n" % (exe, launchApp, e)
+                                log.error(data)
+
+                        body += data
+                    send_notify(app, body)
+            sleep(intervalCheckMin)
+        except Exception as e:
+            e = traceback.format_exc()
+            log.error(str(e))
+            break
 
 def license_inspector():
     log.debug("license_inspector started")

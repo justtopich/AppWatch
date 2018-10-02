@@ -64,7 +64,7 @@ default={
         "intervalCheckMin": "10",
         "active": "1",
         "1": "diskUsage",
-        "2": "MyApp;",
+        "2": "MyApp",
         "3": "MyHttpServer"
     },
     "diskUsage" : {
@@ -140,16 +140,16 @@ sendedMail = []
 diskUsage = 0
 
 # Check logging
-level = logging.INFO
+level = 20
 logSize = 10240
 logCount = 5
 try:
     if config.getboolean("logging", "enable") == False:
         level = 0
     else:
-        Loglevel = str(config.get("logging", "loglevel")).lower()
+        Loglevel = config.get("logging", "loglevel").lower()
         if Loglevel == "full":
-            level = logging.DEBUG
+            level = 10
         else:
             pass
             # backupCount
@@ -159,7 +159,6 @@ except Exception as e:
     print("WARNING: Проверьте параметры logging. Err:", str(e))
     raise SystemExit(1)
 
-
 # create logger
 logFile = homeDir+'AppWatch.log'
 log_formatter = logging.Formatter('%(asctime)s %(levelname)s: %(message)s',
@@ -167,14 +166,15 @@ log_formatter = logging.Formatter('%(asctime)s %(levelname)s: %(message)s',
 myHandler = RotatingFileHandler(logFile, maxBytes = logSize * 1024, backupCount = logCount, delay = 0)
 myHandler.setFormatter(log_formatter)
 log = logging.getLogger('root')
-log.setLevel(int(level))
+log.setLevel(level)
 log.addHandler(myHandler)
 
 cons_log = logging.getLogger('root')
-cons_log.setLevel(int(level))
+cons_log.setLevel(level)
 consoleHandler = logging.StreamHandler(sys.stdout)
 consoleHandler.setFormatter(log_formatter)
 cons_log.addHandler(consoleHandler)
+log.warning(str(level))
 
 # check general settings
 try:
@@ -195,8 +195,8 @@ try:
         log.error("Нет заданий для выполнения. Остановка приложения.")
         raise SystemExit(1)
     else:
-        n = 1
-        while n <= active:
+        n = 0
+        while n < active:
             try:
                 task = config.get('taskList', str(n))
                 if not config.has_section(task):
@@ -206,7 +206,7 @@ try:
             except:
                 log.warning("В taskList нет задания %s" % n)
                 raise SystemExit(1)
-            n = n + 1
+            n += 1
 except Exception as e:
     log.warning("Проверьте параметры снкции taskList: %s" % e)
     raise SystemExit(1)
@@ -221,7 +221,6 @@ for task in taskList:
             pathUsage = pathUsage.replace('\\', '/') + '/'
             log.info("Задан diskUsage. Папка: %s. Лимит: %s GB" % (pathUsage, diskWarn))
             diskUsage = 1
-            taskList.remove('diskUsage')
         except Exception as e:
             log.error("Проверьте параметры: %s" % e)
         continue
