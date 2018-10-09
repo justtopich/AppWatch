@@ -20,12 +20,14 @@ def shutdown_me(signum, frame):
     log.warning('Получена команда завершения работы')
     os._exit(1)
 
-def send_notify(app,body):
-    if app in sendedMail:
-        log.info("Отчёт по событию " + app + " уже был отправлен.")
-        return
+def send_notify(app,body, resend=False):
+    if resend==False:
+        if app in sendedMail:
+            log.info("Отчёт по событию " + app + " уже был отправлен.")
+            return
 
-    sendedMail.append(app)  # чтобы не спамить на почту
+        sendedMail.append(app)  # чтобы не спамить на почту
+
     if noify == 'email':
         log.debug("Создание отчёта по событию " + app)
         try:
@@ -66,7 +68,7 @@ def send_notify(app,body):
             log.error("Не могу отправить отчёт в Slack  %s" % e)
 
 def process_inspector ():
-    def proc_run(app):
+    def proc_run(exe):
         # можно использовать | find
         conv = Popen('taskList /svc /fi "IMAGENAME eq ' + exe + '" /nh', shell=True, encoding='cp866',
                      stdout=PIPE, stderr=PIPE, stdin=DEVNULL)
@@ -76,6 +78,10 @@ def process_inspector ():
 
 
     log.debug("process_inspector started")
+    failList={}
+    for job in jobList:
+        failList[job[0]]=False
+
     while True:
         try:
             for job in jobList:
@@ -86,24 +92,32 @@ def process_inspector ():
                 path = job[4]
                 launchApp = job[5].lower()
                 launch = job[6]
-                status = 0     
+                status = 0
+                resend = False
+                body = ''
                 if launchApp == "" or launchApp == 'none':
                     launchApp = path + exe
                 
-                if proc_run(app)==True:
+                if proc_run(exe)==True:
                     log.debug("Найден процесс " + app +" Запрос статуса.")
                     try:
                         res = requests.get(url, timeout = 10)
                         if res.status_code!=200:
                             raise Exception("Server return status %s" %res.status_code)
                         log.info("Процесс " + app + " работает.")
-                        continue
+                        if failList[app] == False:
+                            continue
+                        else:
+                            failList[app] = False
+                            data = "Процесс %s одумался и вернулся на палубу!" % app
+                            resend=True
+
                     except Exception as e:
                         status = 1
                         data = "Процесс %s не отвечает или вернул не верный статус %s" % (app, e)
                         log.warning(data)
-                        body = 'Капитан! На корабле %s взбунтовал матрос %s!\nIP адрес сервера: %s\n' \
-                               % (localName, localIp, app)
+                        body = f'Капитан! На корабле {localName} взбунтовал матрос {app}!\nIP адрес сервера: {localIp}\n'
+                        failList[app]=True
 
                     if status != 0 and launch is True:
                         status = 0
@@ -122,12 +136,13 @@ def process_inspector ():
                                 os.system('START cmd /c "' + launchApp + '" ' + exeKey)  # исп. другой метод
                                 log.info("Успешный перезапуск " + app)
                                 data += '\nНо он был успешно перезапущен\n'
+                                failList[app] = False
                             except Exception as e:
                                 data = "Не удалось перезапусть процесс: %s (%s): %s\n" % (exe, launchApp, e)
                                 log.error(data)
 
                         body += data
-                    send_notify(app, body)
+                    send_notify(app, body, resend)
             sleep(intervalCheckMin)
         except Exception as e:
             e = traceback.format_exc()
