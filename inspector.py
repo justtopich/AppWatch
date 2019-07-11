@@ -4,6 +4,7 @@ Delete .cfg file and run script to create example configuration.
 """
 
 from time import sleep
+import datetime as dtime
 from threading import Thread
 from subprocess import Popen, PIPE, CREATE_NEW_CONSOLE, DEVNULL
 import requests, smtplib
@@ -20,13 +21,16 @@ def shutdown_me(signum, frame):
     log.warning('Получена команда завершения работы')
     os._exit(1)
 
-def send_notify(app,body, resend=False):
-    if resend==False:
-        if app in sendedMail:
+def send_notify(app,body, sendTime=None):
+    global failList
+    now = dtime.datetime.now()
+    if sendTime is None:
+        failList[app]['send_time'] = now
+    else:
+        delta = now - sendTime
+        if delta < resendTime:
             log.info("Отчёт по событию " + app + " уже был отправлен.")
             return
-
-        sendedMail.append(app)  # чтобы не спамить на почту
 
     if noify == 'email':
         log.debug("Создание отчёта по событию " + app)
@@ -68,20 +72,57 @@ def send_notify(app,body, resend=False):
             log.error("Не могу отправить отчёт в Slack  %s" % e)
 
 def process_inspector ():
-    def proc_run(exe):
+    def is_alive(exe):
         # можно использовать | find
         conv = Popen('taskList /svc /fi "IMAGENAME eq ' + exe + '" /nh', shell=True, encoding='cp866',
                      stdout=PIPE, stderr=PIPE, stdin=DEVNULL)
         stdout = str(conv.communicate())
         result = stdout.split()[0].split("\\n")[-1]
-        return result == exe
+        return result.lower() == exe
+
+
+    def restart(data,restartTime):
+        status = 0
+        failList[app]['attemp'] += 1
+        try:
+            Popen('TASKKILL /f /im ' + exe, shell=True, stdout=PIPE, stderr=PIPE)
+            n = 0
+            while is_alive(exe) is True:
+                sleep(1)
+                n += 1
+                if n>100: raise Exception(f"Не удалось убить процесс {app} : {exe}")
+        except Exception as e:
+            data = 'Не удалось перезапустить процесс: %s\n' % e
+            log.error(data)
+            status = 2
+
+        if status == 0:
+            log.debug(f"Запуск приложения {exe}")
+            try:
+                os.system('START cmd /c "' + startApp + '" ' + exeKey)  # исп. другой метод
+                log.info("Начат перезапуск " + app)
+
+                # проверка что он снова не упал
+                sleep(restartTime)
+                if is_alive(exe) is True:
+                    data += ' выполнена успешно.\n'
+                    failList[app]['isAlive'] = False
+                    failList[app]['attemp'] -= 1
+                else:
+                    raise Exception('он упал сразу после запуска')
+
+            except Exception as e:
+                data = "Не удалось перезапусть процесс: %s (%s): %s\n" % (exe, startApp, e)
+                log.error(data)
+
+        return data
 
 
     log.debug("process_inspector started")
-    failList={}
     for job in jobList:
-        failList[job[0]]=False
-
+        failList[job[0]] = {'isAlive' : False,
+                            "attemp" : 0,
+                            "send_time" : None}
     while True:
         try:
             for job in jobList:
@@ -90,60 +131,56 @@ def process_inspector ():
                 exe = job[2].lower()
                 exeKey = job[3]
                 path = job[4]
-                launchApp = job[5].lower()
-                launch = job[6]
+                startApp = job[5].lower()
+                doRestart = job[6]
+                alwaysWork = job[7]
+                restartTime = job[8]
                 status = 0
-                resend = False
                 body = ''
-                if launchApp == "" or launchApp == 'none':
-                    launchApp = path + exe
-                
-                if proc_run(exe)==True:
+                if startApp == "":
+                    startApp = path + exe
+
+                isAlive = is_alive(exe)
+
+                if isAlive is True:
                     log.debug("Найден процесс " + app +" Запрос статуса.")
                     try:
                         res = requests.get(url, timeout = 10)
                         if res.status_code!=200:
                             raise Exception("Server return status %s" %res.status_code)
                         log.info("Процесс " + app + " работает.")
-                        if failList[app] == False:
+                        if failList[app]['isAlive'] is False:
                             continue
                         else:
-                            failList[app] = False
-                            data = "Процесс %s одумался и вернулся на палубу!" % app
-                            resend=True
+                            failList[app]['isAlive'] = False
+                            data = "Процесс %s одумался и вернулся к работе!" % app
+                            resend = True
 
                     except Exception as e:
                         status = 1
                         data = "Процесс %s не отвечает или вернул не верный статус %s" % (app, e)
                         log.warning(data)
-                        body = f'Капитан! На корабле {localName} взбунтовал матрос {app}!\nIP адрес сервера: {localIp}\n'
-                        failList[app]=True
+                        body = f'Капитан! На сервере {localName} взбунтовал процесс {app}!\nIP адрес сервера: {localIp}\n'
+                        failList[app]['isAlive'] = True
 
-                    if status != 0 and launch is True:
-                        status = 0
-                        try:
-                            Popen('TASKKILL /f /im ' + exe, shell=True, stdout=PIPE, stderr=PIPE)
-                            while proc_run(app)==True:
-                                sleep(1)
-                        except Exception as e:
-                            data = 'Не удалось перезапустить процесс: %s\n' %e
-                            log.error(data)
-                            status = 2
-
-                        if status == 0:
-                            log.debug("Запуск приложения %s (%s)" % (exe, launchApp))
-                            try:
-                                os.system('START cmd /c "' + launchApp + '" ' + exeKey)  # исп. другой метод
-                                log.info("Успешный перезапуск " + app)
-                                data += '\nНо он был успешно перезапущен\n'
-                                failList[app] = False
-                            except Exception as e:
-                                data = "Не удалось перезапусть процесс: %s (%s): %s\n" % (exe, launchApp, e)
-                                log.error(data)
-
+                    if status != 0 and doRestart is True:
+                        data = restart(data, restartTime)
                         body += data
-                    send_notify(app, body, resend)
+
+                    sendTime = failList[app]['send_time']
+                    send_notify(app, body, sendTime)
+
+                elif isAlive is False and alwaysWork is True:
+                    body = f'Капитан! На сервере {localName} отсутсвует процесс {app}!\nIP адрес сервера: {localIp}\n'
+                    log.warning(f"Отсутсвует обязательный процесс {app}. Попытка запуска")
+                    data = restart('Попытка перезапуска', restartTime)
+                    body += data
+                    sendTime = failList[app]['send_time']
+                    send_notify(app, body, sendTime)
+                    
+
             sleep(intervalCheckMin)
+            # sleep(10)
         except Exception as e:
             e = traceback.format_exc()
             log.error(str(e))
@@ -202,7 +239,12 @@ def disk_inspector():
 if __name__ != "__main__":
     from conf import *
 
+    resendTime = dtime.timedelta(minutes=resendTime)
+    global failList
+    failList={}
+
     if diskUsage == 1:
+        failList['diskWarn'] = {'send_time' : None}
         ht3 = Thread(target = disk_inspector, name = 'disk_inspector')
         ht3.start()
     if len(jobList) != 0:

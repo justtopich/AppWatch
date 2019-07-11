@@ -16,7 +16,7 @@ from conf import *
 from __init__ import __version__
 
 svcParams = get_svc_params()
-# devmod = True
+devmod = True
 
 class AppServerSvc(win32serviceutil.ServiceFramework):
     _svc_name_ = svcParams[0]

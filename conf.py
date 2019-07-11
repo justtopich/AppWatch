@@ -41,6 +41,7 @@ default={
         "localName": "Pantsu Server",
         "localIp": "0.0.0.0",
         "Notify": "email",
+        "resendTimeoutM": "30",
         "// Notification service.  email or Slack": ""
     },
     "service": {
@@ -74,7 +75,9 @@ default={
         "critical": "10"
     },
     "myApp" : {
+        "alwaysWork": "false",
         "doRestart": "true",
+        "timeForRestarting": "5",
         "// false will only notify": "",
         "url": "https://myHost.ru",
         "path": "C:\Apps\MyApp",
@@ -86,7 +89,9 @@ default={
         "// If not set, will start <exe> param": ""
     },
     "myHttpServer" : {
+        "alwaysWork": "true",
         "doRestart": "true",
+        "timeForRestarting": "10",
         "url": "http://127.0.1.1:7252",
         "path": "C:\path",
         "exe": "MyServer.exe",
@@ -136,7 +141,6 @@ except Exception as e:
 
 taskList = []
 jobList = []
-sendedMail = []
 diskUsage = 0
 
 # Check logging
@@ -181,6 +185,7 @@ try:
     localName = config.get("server", "localName")
     localIp = config.get("server", "localIp")
     noify = config.get("server", "notify").lower()
+    resendTime = config.getint("server", "resendTimeoutM")
     log.info("Local server is %s (%s)" %(localIp,localName))
 except Exception as e:
     log.error("%s" % e)
@@ -234,6 +239,8 @@ for task in taskList:
         jobListTmp.append(config.get(task, "path").replace('\\', '/') + '/')
         jobListTmp.append(config.get(task, "startApp").replace('\\', '/'))
         jobListTmp.append(config.getboolean(task, "doRestart"))
+        jobListTmp.append(config.getboolean(task, "alwaysWork"))
+        jobListTmp.append(config.getint(task, "timeForRestarting"))
         jobList.append(tuple(jobListTmp))
     except Exception as e:
         log.error("Задание " + task + " отклонено. Проверьте параметры: %s" % e)
