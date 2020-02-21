@@ -1,0 +1,5 @@
+bin/
+src/__pycache__/
+src/AppWatch/
+src/*.log
+src/*.cfg

@@ -6,14 +6,16 @@ Delete .cfg file and run script to create example configuration.
 from time import sleep
 import datetime as dtime
 from threading import Thread
-from subprocess import Popen, PIPE, CREATE_NEW_CONSOLE, DEVNULL
-import requests, smtplib
+from subprocess import Popen, PIPE, CREATE_NEW_CONSOLE, DEVNULL, run
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from json import dumps
-from __init__ import __version__
 import signal, shutil
 import traceback
+
+import requests, smtplib
+
+from __init__ import __version__
 
 
 # ловит ctrl-C. Останавливает модули в нужном порядке
@@ -74,110 +76,146 @@ def send_notify(app,body, sendTime=None):
 def process_inspector ():
     def is_alive(exe):
         # можно использовать | find
-        conv = Popen('taskList /svc /fi "IMAGENAME eq ' + exe + '" /nh', shell=True, encoding='cp866',
+        conv = Popen(f'taskList /svc /fi "IMAGENAME eq {exe}" /nh', shell=True, encoding='cp866',
                      stdout=PIPE, stderr=PIPE, stdin=DEVNULL)
         stdout = str(conv.communicate())
         result = stdout.split()[0].split("\\n")[-1]
         return result.lower() == exe
 
-
-    def restart(data,restartTime):
+    def restart(data, job, isDead=False):
         status = 0
         failList[app]['attemp'] += 1
-        try:
-            Popen('TASKKILL /f /im ' + exe, shell=True, stdout=PIPE, stderr=PIPE)
-            n = 0
-            while is_alive(exe) is True:
-                sleep(1)
-                n += 1
-                if n>100: raise Exception(f"Не удалось убить процесс {app} : {exe}")
-        except Exception as e:
-            data = 'Не удалось перезапустить процесс: %s\n' % e
-            log.error(data)
-            status = 2
+        if isDead is False:
+            try:
+                Popen(f'TASKKILL /f /im {exe}', shell=True, stdout=PIPE, stderr=PIPE)
+                n = 0
+                while is_alive(exe) is True:
+                    sleep(1)
+                    n += 1
+                    if n > 100: raise Exception(f"Не удалось убить процессня {app} : {exe}")
+            except Exception as e:
+                data = 'Не удалось перезапустить процессня: %s\n' % e
+                log.error(data)
+                status = 2
 
         if status == 0:
             log.debug(f"Запуск приложения {exe}")
-            try:
-                os.system('START cmd /c "' + startApp + '" ' + exeKey)  # исп. другой метод
-                log.info("Начат перезапуск " + app)
+            whatStart = job['whatStart']
+            if whatStart == 'script':
+                 target = job['script']
+            elif whatStart == 'exe':
+                target = f"{path}{exe} {job['exeKey']}"
+            else:
+                target = ''
 
-                # проверка что он снова не упал
+            if target != '':
+                log.info("Начат запуск " + app)
+                try:
+                    os.system(f"start cmd /c {target}")
+                except Exception as e:
+                    data = f"Не удалось перезапусть процессня: {exe} ({app}): {e}\n"
+                    status = 3
+                    log.error(data)
+            else:
+                log.info("Начат запуск службы " + job['service'])
+                try:
+                    # hSCManager = win32service.OpenSCManager(None, None, win32service.SC_MANAGER_CONNECT)
+                    # handle = win32service.OpenService(hSCManager, jobListTmp['service'], win32service.SERVICE_ALL_ACCESS)
+                    # win32service.StartService(handle, None)
+                    # win32service.CloseServiceHandle(handle)
+                    p = Popen(f"net start {job['service']}", shell=True, encoding='cp866',
+                              stdout=PIPE, stderr=PIPE, stdin=DEVNULL)
+                    stdout, stderr = p.communicate()
+                    if stdout:
+                        for line in stdout.split('\n'):
+                            line.replace('\n\n', '')
+                            if line != '':
+                                log.info(line)
+                    if stderr:
+                        for line in stderr.split('\n'):
+                            line.replace('\n\n', '')
+                            if line != '':
+                                log.error(line)
+
+                except Exception as e:
+                    log.error(str(e))
+                    e = traceback.format_exc()
+                    status = 3
+                    data = f"Не удалось перезапусть службу: {job['service']} ({app}): {e}\n"
+                    log.error(data)
+
+            # проверка что он снова не упал
+            #TODO отсчёт времени падения после старта
+            if status == 0:
                 sleep(restartTime)
                 if is_alive(exe) is True:
                     data += ' выполнена успешно.\n'
                     failList[app]['isAlive'] = False
                     failList[app]['attemp'] -= 1
+                    log.info(data)
                 else:
-                    raise Exception('он упал сразу после запуска')
-
-            except Exception as e:
-                data = "Не удалось перезапусть процесс: %s (%s): %s\n" % (exe, startApp, e)
-                log.error(data)
-
+                    data = f"Не удалось перезапусть {app}: он вновь падает\n"
+                    log.error(data)
         return data
-
 
     log.debug("process_inspector started")
     for job in jobList:
-        failList[job[0]] = {'isAlive' : False,
-                            "attemp" : 0,
-                            "send_time" : None}
+        failList[job['task']] = {
+            'isAlive' : False,
+            "attemp" : 0,
+            "send_time" : None}
+
     while True:
         try:
+            #TODO или всё забрать или убрать лишние
             for job in jobList:
-                app = job[0]
-                url = str(job[1])        
-                exe = job[2].lower()
-                exeKey = job[3]
-                path = job[4]
-                startApp = job[5].lower()
-                doRestart = job[6]
-                alwaysWork = job[7]
-                restartTime = job[8]
+                app = job['task']
+                url = job['url']
+                exe = job['exe'].lower()
+                path = job['path']
+                doRestart = job['doRestart']
+                alwaysWork = job['alwaysWork']
+                restartTime = job['restartTime']
                 status = 0
                 body = ''
-                if startApp == "":
-                    startApp = path + exe
 
                 isAlive = is_alive(exe)
-
                 if isAlive is True:
-                    log.debug("Найден процесс " + app +" Запрос статуса.")
+                    log.debug(f"Найден процесс {app} Запрос статуса.")
                     try:
                         res = requests.get(url, timeout = 10)
-                        if res.status_code!=200:
+                        if res.status_code != 200:
                             raise Exception("Server return status %s" %res.status_code)
-                        log.info("Процесс " + app + " работает.")
+
+                        log.info(f"процесс {app} работает.")
+
                         if failList[app]['isAlive'] is False:
                             continue
                         else:
                             failList[app]['isAlive'] = False
-                            data = "Процесс %s одумался и вернулся к работе!" % app
-                            resend = True
-
+                            data = "процессня %s одумался и вернулся к работе ня!" % app
+                            # resend = True
                     except Exception as e:
                         status = 1
-                        data = "Процесс %s не отвечает или вернул не верный статус %s" % (app, e)
+                        data = f"Процессня {app} не отвечает или вернул не верный статус ня: {e}"
                         log.warning(data)
-                        body = f'Капитан! На сервере {localName} взбунтовал процесс {app}!\nIP адрес сервера: {localIp}\n'
+                        body = f'Сенпай! Под котацу {localName} уснул {app}!\nIP адрес котацу: {localIp}\n'
                         failList[app]['isAlive'] = True
 
                     if status != 0 and doRestart is True:
-                        data = restart(data, restartTime)
+                        data = restart(data, job)
                         body += data
 
                     sendTime = failList[app]['send_time']
                     send_notify(app, body, sendTime)
 
                 elif isAlive is False and alwaysWork is True:
-                    body = f'Капитан! На сервере {localName} отсутсвует процесс {app}!\nIP адрес сервера: {localIp}\n'
+                    body = f'Сенпай! Под котацу {localName} не найден процессня {app}!\nIP адрес котацу: {localIp}\n'
                     log.warning(f"Отсутсвует обязательный процесс {app}. Попытка запуска")
-                    data = restart('Попытка перезапуска', restartTime)
+                    data = restart('Попытка перезапуска', job, isDead=True)
                     body += data
                     sendTime = failList[app]['send_time']
                     send_notify(app, body, sendTime)
-                    
 
             sleep(intervalCheckMin)
             # sleep(10)
@@ -191,27 +229,27 @@ def license_inspector():
     while True:
         log.info("Проверка лицензий")
         for job in jobList:
-            app = job[0]
-            path = job[4]
-            log.debug("Проверка лицензии " + app)
+            app = job['task']
+            path = job['path']
+            log.debug(f"Проверка лицензии {app}")
             try:
                 LicLog = open(path+'license.log', encoding = 'utf-8')
                 text = LicLog.read()
                 LicLog.close()
                 if 'LICENSE: Error' in text or 'No license found' in text:
-                    log.error("Ошибка лицензии " + app)
+                    log.error(f"Ошибка лицензии {app}")
                     with open(path + 'uid/uid.dat', encoding = 'utf-8') as uidDat:
                         uid = uidDat.read()
-                    body = 'Капитан! На корабле ' + localName + " произошёл бунт против лицензии, возглавляемый пиратом " \
-                        + app + '!\nIP адрес сервера: ' + localIp + '\nUID лицензии: ' + uid
+                    body = f"Сенпай! Под котацу {localName} процессня {app} отверг присягу лицензии!\n" \
+                           f"IP адрес котацу: {localIp}\nUID лицензии: {uid}"
                     send_notify(app,body)
                     break
                 else:
                     pass
-                log.debug("Корректная лицензия " + app)
+                log.debug(f"Корректная лицензия {app}")
             except Exception as e:
                 if e.errno == 2:
-                    log.warning("Не найден журнал лицензии " + app)
+                    log.warning(f"Не найден журнал лицензии {app}")
                 else:
                     log.error("Ошибка чтения журнала лицензии %s: %s" % (app, e))
         sleep(intervalCheckMin*2)
@@ -219,31 +257,35 @@ def license_inspector():
 def disk_inspector():
     log.debug("disk_inspector started")
     while True:
-        free = round(shutil.disk_usage(pathUsage).free / 1073741824, 2)
+        free = round(shutil.disk_usage(diskUsage).free / 1073741824, 2)
         if free < critFree:
-            log.error("Критически мало места! Осталось всего: " + str(free))
+            log.error(f"Критически мало места! Осталось всего: {free}")
             app = 'critFree'
-            body = 'Капитан! На корабле ' + localName + " закончилась провизия" + '!\nIP адрес сервера: ' + localIp \
-                + '\nСвободно места : ' + str(free)
+            body = f"Сенпай! Под котацу {localName} уже нет места!\n" \
+                   f"IP адрес сервера: {localIp}\n" \
+                   f"Свободно места на диске {diskUsage} : {free}GB"
             send_notify(app, body)
         elif free < diskWarn:
-            log.warning("Заканчивается место. Свободно на диске: %s GB" %free)
+            log.warning(f"Заканчивается место. Свободно на диске: {free}GB")
             app = 'diskWarn'
-            body = 'Капитан! На корабле ' + localName + " заканчивается провизия" + '!\nIP адрес сервера: ' + localIp \
-                + '\nСвободно на диске : %s GB' %free
+            body = f"Сенпай! Под котацу {localName} становиться тесновато!\n" \
+                   f"IP адрес сервера: {localIp}\n" \
+                   f"Свободно места на диске {diskUsage} : {free}GB"
             send_notify(app, body)
         elif free > diskWarn:
-            log.info("Свободно места %s GB. До лимита ещё: %s GB" % (free, round(free-diskWarn,2)))
+            log.info("Свободно места %s GB. До лимита ещё: %s GB" % (free, round(free - diskWarn,2)))
         sleep(intervalCheckMin)
 
 if __name__ != "__main__":
+    #TODO убрать *
     from conf import *
+    from __main__ import win32serviceutil, win32service
 
     resendTime = dtime.timedelta(minutes=resendTime)
     global failList
     failList={}
 
-    if diskUsage == 1:
+    if diskTask is True:
         failList['diskWarn'] = {'send_time' : None}
         ht3 = Thread(target = disk_inspector, name = 'disk_inspector')
         ht3.start()
@@ -254,7 +296,10 @@ if __name__ != "__main__":
         ht2.start()
 
     log.info("AppWatch started. Version " + __version__)
+
     if 'run' in sys.argv:
         signal.signal(signal.SIGTERM, shutdown_me)
         signal.signal(signal.SIGINT, shutdown_me)
-        while True: sleep(10)
+        input()
+        while True:
+            input('Use Ctrl+C to stop me\n')

@@ -1,4 +1,4 @@
-# build=20180627 ; 163
+# build=20180627 ; 246
 VSVersionInfo(
   ffi=FixedFileInfo(
     filevers=(1, 0, 0, 0),
@@ -15,14 +15,14 @@ VSVersionInfo(
       [
     StringTable(
         u'040904B0',
-        [StringStruct(u'CompanyName', u'JusTopich'),
+        [StringStruct(u'CompanyName', u'jusTTopich'),
         StringStruct(u'FileDescription', u'WatchDog for Windows apps'),
-        StringStruct(u'FileVersion', u'build20181009'),
+        StringStruct(u'FileVersion', u'build20200221'),
         StringStruct(u'InternalName', u'AppWatch'),
-        StringStruct(u'LegalCopyright', u'JusTopich'),
-        StringStruct(u'OriginalFilename', u'AppWatch.py'),
+        StringStruct(u'LegalCopyright', u'jusTTopich'),
+        StringStruct(u'OriginalFilename', u'AppWatch.exe'),
         StringStruct(u'ProductName', u'AppWatch'),
-        StringStruct(u'ProductVersion', u'2018, 10, 09, 163')])
+        StringStruct(u'ProductVersion', u'2020, 02, 21, 246')])
     ]), 
     VarFileInfo([VarStruct(u'Translation', [1049, 1200])])
   ]

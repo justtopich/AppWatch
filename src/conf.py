@@ -6,6 +6,89 @@ import re, sys, time, os
 homeDir = sys.argv[0][:sys.argv[0].replace('\\', '/').rfind('/')+1]
 devmod = False
 
+# пример конфига
+default={
+    "server" : {
+        "// This Server info": "",
+        "localName": "Pantsu Server",
+        "localIp": "0.0.0.0",
+        "Notify": "email",
+        "// email or slack": "",
+        "resendTimeoutM": "30",
+    },
+    "service": {
+        "name": "AppWatchSvc",
+        "displayName": "AppWatch Service",
+        "description": "WatchDog for Windows apps"
+    },
+    "slack" : {
+        "url": "YOUR_WEBHOOK_URL_HERE",
+    },
+    "email" : {
+        "userMail": "admin@pantsumail.ru",
+        "server": "smtp.pantsumail.ru",
+        "port": "587",
+        "// Try 587 if 465 not work": "",
+        "user": "username",
+        "password": "11111",
+        "fromHeader": "Pantsu Alarm <bot@pantsumail.ru>"
+    },
+    "taskList" : {
+        "intervalCheckMin": "10",
+        "active": "3",
+        "// will do all": "",
+        "1": "diskUsage",
+        "2": "myApp",
+        "3": "myHttpServer"
+    },
+    "diskUsage" : {
+        "// Free space limit in GB": "",
+        "disk": "C:\\",
+        "warning": "30",
+        "critical": "10"
+    },
+    "myApp" : {
+        "alwaysWork": "false",
+        "// not check if proccess not running": "",
+        "doRestart": "true",
+        "// if run and bad check": "if false will only notify",
+        "timeForRestartingSec": "20",
+        "url": "https://myHost.ru",
+        "// must return status 200": "",
+        "exe": "myApp.exe",
+        "// What watching for": "",
+        "whatStart": "exe",
+        "// exe|script|service": "",
+        "path": "C:\Apps\MyApp",
+        "exeKey": "/247 /hidegui",
+        "// Keys for starting exe": "",
+        "script": "c:\\app\\start.bat",
+        "// if whatStart=script": "",
+        "service": "appDeamon",
+        "// windows service name": ""
+    },
+    "myHttpServer" : {
+        "alwaysWork": "true",
+        "// start process if not running": "",
+        "doRestart": "true",
+        "timeForRestartingSec": "30",
+        "url": "http://127.0.1.1:7252/uptime",
+        "exe": "MyServer.exe",
+        "whatStart": "service",
+        "path": "",
+        "exeKey": "",
+        "script": "",
+        "service": "HttpServer-srv"
+    },
+    "logging" : {
+        "Enable" : "True",
+        "Loglevel" : "Normal",
+        "// Normal or Full" : "",
+        "LogMaxSizeKbs" : "10240",
+        "logMaxFiles" : "5"
+    }
+}
+
 # Загружает конфиг
 try:
     config = open(homeDir+'AppWatch.cfg', encoding='utf-8')
@@ -35,81 +118,8 @@ def writeSection(section, params):
     config.optionxform = lowcaseMe  # возращаем предопределённый метод назад
     configWrite()
     return 1
-default={
-    "server" : {
-        "// This Server info": "",
-        "localName": "Pantsu Server",
-        "localIp": "0.0.0.0",
-        "Notify": "email",
-        "resendTimeoutM": "30",
-        "// Notification service.  email or Slack": ""
-    },
-    "service": {
-        "name": "AppWatchSvc",
-        "displayName": "AppWatch Service",
-        "description": "WatchDog for Windows apps"
-    },
-    "slack" : {
-        "url": "YOUR_WEBHOOK_URL_HERE",
-    },
-    "email" : {
-        "userMail": "admin@pantsumail.ru",
-        "server": "smtp.pantsumail.ru",
-        "port": "587",
-        "// Try 587 if 465 not work": "",
-        "user": "username",
-        "password": "11111",
-        "fromHeader": "Pantsu Alarm <bot@pantsumail.ru>"
-    },
-    "taskList" : {
-        "intervalCheckMin": "10",
-        "active": "1",
-        "1": "diskUsage",
-        "2": "MyApp",
-        "3": "MyHttpServer"
-    },
-    "diskUsage" : {
-        "// Free space limit in GB": "",
-        "path": "C:\\",
-        "warning": "30",
-        "critical": "10"
-    },
-    "myApp" : {
-        "alwaysWork": "false",
-        "doRestart": "true",
-        "timeForRestarting": "5",
-        "// false will only notify": "",
-        "url": "https://myHost.ru",
-        "path": "C:\Apps\MyApp",
-        "exe": "myApp.exe",
-        "// What must be running": "",
-        "exeKey": "/247 /hidegui",
-        "// Keys for starting exe": "",
-        "startApp": "",
-        "// If not set, will start <exe> param": ""
-    },
-    "myHttpServer" : {
-        "alwaysWork": "true",
-        "doRestart": "true",
-        "timeForRestarting": "10",
-        "url": "http://127.0.1.1:7252",
-        "path": "C:\path",
-        "exe": "MyServer.exe",
-        "exeKey": "",
-        "startApp": "C:\path\StartMyServer.bat"
-    },
-    "logging" : {
-        "Enable" : "True",
-        "Loglevel" : "Normal",
-        "// Normal or Full" : "",
-        "LogMaxSizeKbs" : "10240",
-        "logMaxFiles" : "5"
-    }
-}
 
-# пример конфига
-
-# Создаёт секции если их нет. Потом в рекурсию загнать можно
+# Создаёт секции если их нет. 
 try:
     used=0
     for i in ['server', 'service', 'slack', 'email', 'taskList', 'logging']:
@@ -141,7 +151,7 @@ except Exception as e:
 
 taskList = []
 jobList = []
-diskUsage = 0
+diskTask = False
 
 # Check logging
 level = 20
@@ -165,8 +175,9 @@ except Exception as e:
 
 # create logger
 logFile = homeDir+'AppWatch.log'
-log_formatter = logging.Formatter('%(asctime)s %(levelname)s: %(message)s',
-                                      datefmt = '%Y-%m-%d %H:%M:%S')
+log_formatter = logging.Formatter(
+                                        '%(asctime)s %(levelname)s: %(message)s',
+                                        datefmt = '%Y-%m-%d %H:%M:%S')
 myHandler = RotatingFileHandler(logFile, maxBytes = logSize * 1024, backupCount = logCount, delay = 0)
 myHandler.setFormatter(log_formatter)
 log = logging.getLogger('root')
@@ -178,7 +189,6 @@ cons_log.setLevel(level)
 consoleHandler = logging.StreamHandler(sys.stdout)
 consoleHandler.setFormatter(log_formatter)
 cons_log.addHandler(consoleHandler)
-log.warning(str(level))
 
 # check general settings
 try:
@@ -203,17 +213,17 @@ try:
         n = 0
         while n < active:
             try:
-                task = config.get('taskList', str(n))
+                task = config.get('taskList', str(n+1))
                 if not config.has_section(task):
                     log.error("Задано несуществующее задание " + task)
                 else:
                     taskList.append(task)
             except:
-                log.warning("В taskList нет задания %s" % n)
+                log.warning(f"В taskList нет задания %{n+1}")
                 raise SystemExit(1)
             n += 1
 except Exception as e:
-    log.warning("Проверьте параметры снкции taskList: %s" % e)
+    log.warning(f"Проверьте параметры снкции taskList: {e}")
     raise SystemExit(1)
 
 # check tasks settings and create tasks list
@@ -222,28 +232,37 @@ for task in taskList:
         try:
             diskWarn = config.getint('diskUsage', "Warning")
             critFree = config.getint('diskUsage', "Critical")
-            pathUsage = config.get('diskUsage', "path")
-            pathUsage = pathUsage.replace('\\', '/') + '/'
-            log.info("Задан diskUsage. Папка: %s. Лимит: %s GB" % (pathUsage, diskWarn))
-            diskUsage = 1
+            diskUsage = config.get('diskUsage', "disk")
+            diskUsage = diskUsage.replace('\\', '/') + '/'
+            log.info(f"Задан diskUsage. Папка: {diskUsage}. Лимит: {diskWarn} GB")
+            diskTask = True
         except Exception as e:
-            log.error("Проверьте параметры: %s" % e)
+            log.error(f"Проверьте параметры: {e}")
         continue
 
-    jobListTmp = []
+    jobListTmp = {}
     try:
-        jobListTmp.append(task)
-        jobListTmp.append(config.get(task, "url"))
-        jobListTmp.append(config.get(task, "Exe"))
-        jobListTmp.append(config.get(task, "ExeKey"))
-        jobListTmp.append(config.get(task, "path").replace('\\', '/') + '/')
-        jobListTmp.append(config.get(task, "startApp").replace('\\', '/'))
-        jobListTmp.append(config.getboolean(task, "doRestart"))
-        jobListTmp.append(config.getboolean(task, "alwaysWork"))
-        jobListTmp.append(config.getint(task, "timeForRestarting"))
-        jobList.append(tuple(jobListTmp))
+        jobListTmp['task'] = task
+        jobListTmp['url'] = config.get(task, "url")
+        jobListTmp['exe'] = config.get(task, "Exe")
+        jobListTmp['path'] = config.get(task, "path").replace('\\', '/') + '/'
+        jobListTmp['doRestart'] = config.getboolean(task, "doRestart")
+        jobListTmp['alwaysWork'] = config.getboolean(task, "alwaysWork")
+        jobListTmp['restartTime'] = config.getint(task, "timeForRestartingSec")
+        jobListTmp['whatStart'] = whatStart = config.get(task, "whatStart")
+
+        if whatStart == 'exe':
+            jobListTmp['exeKey'] = config.get(task, "exeKey")
+        elif whatStart == 'script':
+            jobListTmp['script'] = config.get(task, "script").replace('\\', '/')
+        elif whatStart == 'service':
+            jobListTmp['service'] = config.get(task, "service")
+        else:
+            log.error('Wrong parameter whatStart. Allowed: exe, script, service')
+
+        jobList.append(jobListTmp)
     except Exception as e:
-        log.error("Задание " + task + " отклонено. Проверьте параметры: %s" % e)
+        log.error(f"Задание {task} отклонено. Проверьте параметры: {e}")
         raise SystemExit(1)
 
 # check email settings
@@ -257,19 +276,19 @@ if noify == 'email':
         headMail = config.get("email", "fromheader")
         log.debug("Адрес почты отправителя " + pechkin)
     except Exception as e:
-        log.error("Проверьте параметры почты: %s" % e)
+        log.error(f"Проверьте параметры почты: {e}")
         raise SystemExit(1)
     # проверяем правильность почты и убираем пробелы
 
     if re.findall(r'\w+@\w+.\w+', userMail):
-        log.debug("Адрес почты получателя " + userMail)
+        log.debug(f"Адрес почты получателя {userMail}")
     else:
         log.error("Неправильный адрес почты userMail.")
         raise SystemExit(1)
 
 elif noify == 'slack':
     try:
-        slackUrl=config.get("slack", "url")
+        slackUrl = config.get("slack", "url")
         log.info("Using Slack services")
     except:
         log.error('Bad notify URL')
@@ -278,17 +297,16 @@ else:
     log.error("use <email> or <slack> for Notify parameter")
     raise SystemExit(1)
 
-
 # сбор параметров для службы windows
 def get_svc_params():
     try:
-        return [config.get("service", "name"),
-                config.get("service", "displayName"),
-                config.get("service", "description")
-                ]
+        return [
+            config.get("service", "name"),
+            config.get("service", "displayName"),
+            config.get("service", "description")]
     except Exception as e:
         log.error("Неправильно заданы параметры [service]: " + str(e))
         time.sleep(3)
         raise SystemExit(1)
 
-del i, level, task, logFile, logSize, logCount, default
+del i, level, logFile, logSize, logCount, default
