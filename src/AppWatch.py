@@ -1,23 +1,15 @@
-﻿####################################
-#
-# AppWatch. 20181009
-#
-# Создание\удаление windows службы. Обработка ключей консоли.
-# Запуск через службу\консоль.
-#
-####################################
-
+﻿from time import sleep
 import os, sys
 import socket
 import servicemanager
+import traceback
 
 import win32event
 import win32service
 import win32serviceutil
 
 from __init__ import __version__
-from conf import *
-
+from conf import get_svc_params
 
 # Windows запускает модули exe из папки пользователя
 # Папка должна определяться только исполняемым файлом
@@ -26,9 +18,9 @@ homeDir = keys[0].replace('\\', '/')+'/'
 appName = keys[1][:keys[1].find('.')].lower()
 del keys
 
-# devMode = False
-devMode = True
-sys.argv.append('run')
+devMode = False
+# devMode = True
+# sys.argv.append('run')
 
 svcParams = get_svc_params()
 
@@ -64,12 +56,12 @@ def svc_init():
 
 if __name__ == "__main__":
     try:
-        if len(sys.argv) == 1 and devMode is False:
+        if len(sys.argv) == 1 and not devMode:
             if homeDir.endswith('system32/'):
                 # Server 2012 != Win 10
                 homeDir = os.path.dirname(sys.executable) + '/'
 
-            from conf import *
+            from conf import cfg
 
             AppServerSvc = svc_init()
             servicemanager.Initialize()
@@ -89,7 +81,7 @@ if __name__ == "__main__":
                 from conf import *
 
                 svcParams = get_svc_params()
-                if devMode is True:
+                if devMode:
                     print('\n!#RUNNING IN DEVELOPER MODE\n')
                     log.setLevel(10)
                 import inspector
@@ -97,7 +89,7 @@ if __name__ == "__main__":
                 raise Exception('Show help')
 
     except Exception as e:
-        print(e)
+        print(traceback.format_exc())
         with open(homeDir+'error.txt','w') as file:
             file.write(str(e))
         print(f'\nUsage: {os.path.basename(sys.argv[0])} [options]\n'
@@ -106,4 +98,4 @@ if __name__ == "__main__":
               ' install : установка службы windows\n'
               ' remove : удалить службу windows\n'
               ' update: обновить службу windows\n')
-        time.sleep(2)
+        sleep(2)
