@@ -1,6 +1,6 @@
 bin/
 src/*.log
-src/*.cfg
+src/AppWatch.cfg
 src/error.txt
 src/__pycache__/
 src/AppWatch/
