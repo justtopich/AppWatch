@@ -11,6 +11,7 @@ AppWatch использует коннекторы к различным сер�
 Минимальная реализация:
 
 ```python
+import requests
 from conf import configparser, log, templater
 
 class Notify:
@@ -19,7 +20,9 @@ class Notify:
         self.cfg = {}
         self.defaultCfg = {"myParameter": "myValue"}
 
-​	def load_config(self, config: configparser) -> dict:	
+​	def load_config(self, config: configparser, proxy: dict=None) -> dict:
+		self.cfg['proxy'] = proxy
+    
 		try:
 			self.cfg["myParameter"] = config.get(self.name, "myParameter")
 		except Exception as e:
@@ -33,6 +36,7 @@ class Notify:
 			print(msg)
 			print(f"Датчик {app} зарегестрировал событие {event}.")
 			print(f"Текст события: {body}")
+			requests.get('someURL', proxies=self.cfg['proxy'])
             return True
         except Exception as e:
             log.error(f"Не удалось отправить оповещение: {e}")
@@ -68,9 +72,17 @@ class Notify:
 
 #### Notify: методы
 
-###### load_config(self, config: configparser)
+###### load_config(self, config: configparser, proxy: dict=None)
 
 Чтение параметров. Ваши параметры хранятся в секции, которая имеет тоже название что и коннектор. Коннектор должен вернуть свой актуальный конфиг в виде словаря.
+
+**proxy** является словарём, содержащий адреса прокси серверов:
+
+`{"https": "host:port", "http": "host:port"}`
+
+Если в **AppWatch.cfg**  парметр **[notify]useproxy=False** то proxy будет None.
+
+
 
 ###### send_notify(self, app:str, event:str, body:str)
 

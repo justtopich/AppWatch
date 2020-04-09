@@ -10,6 +10,7 @@ from email.mime.multipart import MIMEMultipart
 import smtplib
 import re
 
+
 from conf import configparser, log, templater
 
 
@@ -27,7 +28,9 @@ class Notify:
             "password": "11111",
             "fromHeader": "Pantsu Alarm <bot@pantsumail.ru>"}
 
-    def load_config(self, config: configparser) -> dict:
+    def load_config(self, config: configparser, proxy:dict = None) -> dict:
+        self.cfg['proxy'] = proxy
+
         try:
             self.cfg["sendTo"] = config.get(self.name, "sendTo")
             self.cfg["server"] = config.get(self.name, "server")

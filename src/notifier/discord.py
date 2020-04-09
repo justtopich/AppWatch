@@ -1,23 +1,25 @@
 ####################################
 #
 # AppWatch
-# Connector to Discord service
+# Connector to Discord service v1.1
 #
 ####################################
 
-from json import dumps
+import traceback
 import requests
 from conf import configparser, log, templater
 
 
 class Notify:
     def __init__(self, name: str):
-        log.info("Discord connector v1.0")
+        log.info("Discord connector v1.1")
         self.name = name
         self.cfg = {}
         self.defaultCfg = {"url": "YOUR_WEBHOOK_URL_HERE"}
 
-    def load_config(self, config: configparser) -> dict:
+    def load_config(self, config: configparser, proxy:dict = None) -> dict:
+        self.cfg['proxy'] = proxy
+
         try:
             self.cfg["url"] = config.get(self.name, "url")
         except Exception as e:
@@ -26,7 +28,7 @@ class Notify:
             raise Exception(e)
 
         try:
-            r = requests.get(self.cfg["url"])
+            r = requests.get(self.cfg["url"], timeout=10, proxies=proxy)
             if r.status_code != 200:
                 raise ConnectionError
 
@@ -39,6 +41,8 @@ class Notify:
             e = "Bad answer from Discord. Check WEBHOOK URL"
         except KeyError:
             e = "WEBHOOK doesn't return token"
+        except Exception as e:
+            print(traceback.format_exc())
 
         if 'token' not in self.cfg:
             e = f"Fail with discord connection: {e}"
@@ -47,10 +51,10 @@ class Notify:
 
         return self.cfg
 
-    def send_notify(self, app:str, event:str, body:str) -> bool:
+    def send_notify(self, app: str, event: str, body: str) -> bool:
         try:
             data = {"username": "AppWatch", "content": body}
-            res = requests.post(self.cfg['url'], json=data,  timeout=10)
+            res = requests.post(self.cfg['url'], json=data, timeout=10, proxies=self.cfg['proxy'])
 
             if res.ok:
                 log.info(f"Отчёт отправлен.")

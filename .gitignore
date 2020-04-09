@@ -1,6 +1,7 @@
 bin/
 src/*.log
 src/*.cfg
+src/error.txt
 src/__pycache__/
 src/AppWatch/
 src/notifier/__pycache__/

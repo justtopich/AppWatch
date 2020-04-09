@@ -6,6 +6,7 @@ import traceback
 homeDir = sys.argv[0][:sys.argv[0].replace('\\', '/').rfind('/')+1]
 cfg = {
     "notify": {
+        'proxy': None,
         "tmpl": {}
     },
     "tasks": {"jobList": {}}
@@ -18,6 +19,11 @@ default = {
         "// This Server info": "",
         "localName": "Pantsu Server",
         "localIp": "0.0.0.0",
+        "useProxy": "false"
+    },
+    "proxy": {
+        "https": 'host:port',
+        "http": 'host:port'
     },
     "service": {
         "name": "AppWatchSvc",
@@ -117,6 +123,7 @@ def writeSection(section:str, params:dict) -> bool:
         with open(homeDir + 'AppWatch.cfg', "w") as configFile:
             config.write(configFile)
 
+    print(f'Write section {section}')
     config.optionxform = str  # позволяет записать параметр сохранив регистр
     config.add_section(section)
     for val in params:
@@ -209,6 +216,27 @@ def validate(config: configparser.RawConfigParser, log: logging.Logger) -> dict:
         cfg["notify"]["type"] = config.get("notify", "type").lower()
         if cfg["notify"]["type"].strip() == '':
             raise Exception(f'Wrong Notify type: {cfg["notify"]["type"]}')
+
+        cfg["notify"]["useproxy"] = config.getboolean("notify", "useproxy")
+        if cfg['notify']["useproxy"]:
+            log.warning("Using proxy for notifier")
+            if not config.has_section('proxy'):
+                if writeSection('proxy', default['proxy']):
+                    print("WARNING: Были созданы новые секции в файле конфигурации "
+                          "Для их действия запустите коннектор заново.")
+                    time.sleep(3)
+                    raise SystemExit(1)
+
+            cfg['notify']['proxy'] = {'http': {}, 'https': {}}
+            added = False
+            for k in cfg['notify']['proxy']:
+                if config.has_option('proxy', k):
+                    added = True
+                    cfg['notify']['proxy'][k] = config.get('proxy', k)
+
+            if not added:
+                raise Exception(f"Ebabled Proxy, but no one proxy added")
+
     except Exception as e:
         log.error("%s" % e)
         raise SystemExit(1)
@@ -283,6 +311,7 @@ class Templater:
     def __init__(self, log: logging.Logger):
         self.legendTmpl = {
             'main': {
+                "break": "\n",
                 "localName": cfg['notify']['localName'],
                 "localIp": cfg['notify']['localIp']
             }
@@ -311,13 +340,23 @@ class Templater:
             raise SystemExit(1)
 
     def extend_legend(self, appName: str, tmpl: dict):
+        for newP, v in tmpl.items():
+            if isinstance(v, dict):
+                raise Exception(f"Trying add multiple levels dict")
+            
+            for oldApp in self.legendTmpl.values():
+                for oldP in oldApp:
+                    if newP.lower() == oldP.lower():
+                        raise Exception(f"Templater legend already have {newP} for module {oldApp}")
+                        
         self.legendTmpl[appName] = tmpl.copy()
 
     def tmpl_fill(self, appName: str, event: str) -> str:
         body = self.tmpl[appName][event.lower()]
-        for e in self.legendTmpl.values():
-            for k, v in e.items():
+        for appName in self.legendTmpl.values():
+            for k, v in appName.items():
                 body = body.replace("{{%s}}" % k, str(v))
+        print(body)
         return body
 
 class Notify:
@@ -326,7 +365,7 @@ class Notify:
         self.cfg = cfg
         self.defaultCfg = {}
 
-    def load_config(self, config: configparser) -> dict:
+    def load_config(self, config: configparser, proxy: dict=None) -> dict:
         return {}
 
     def send_notify(self, app:str, event:str, body:str) -> bool:
@@ -337,6 +376,7 @@ def load_notifier(cfg: dict, log: logging.Logger) -> Notify:
         name = cfg["notify"]["type"]
         if name != '':
             log.info(f'Load notifier {name}')
+            # need for pyInstaller
             import notifier.email
             import notifier.discord
             import notifier.slack
@@ -362,7 +402,7 @@ def load_notifier(cfg: dict, log: logging.Logger) -> Notify:
             except Exception as e:
                 log.error(f"Fail to load notify configuration: {e}")
 
-            cfg["notify"][name] = notify.load_config(config)
+            cfg["notify"][name] = notify.load_config(config, cfg['notify']['proxy'])
 
         return notify
     except ImportError as e:
