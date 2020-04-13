@@ -14,15 +14,15 @@ from conf import get_svc_params
 # Windows запускает модули exe из папки пользователя
 # Папка должна определяться только исполняемым файлом
 keys = os.path.split(os.path.abspath(os.path.join(os.curdir, __file__)))
-homeDir = keys[0].replace('\\', '/')+'/'
+homeDir = sys.argv[0][:sys.argv[0].replace('\\', '/').rfind('/')+1]
 appName = keys[1][:keys[1].find('.')].lower()
+svcParams = get_svc_params()
 del keys
 
 devMode = False
 # devMode = True
 # sys.argv.append('run')
 
-svcParams = get_svc_params()
 
 def svc_init():
     class AppServerSvc(win32serviceutil.ServiceFramework):
@@ -45,12 +45,13 @@ def svc_init():
                 import inspector
             except Exception as e:
                 with open(homeDir+'error.txt', 'w') as f:
-                    f.write(str(e))
-                    os._exit(42)
+                    f.write(f"{traceback.format_exc()}")
+                os._exit(42)
 
             while rc != win32event.WAIT_OBJECT_0:
-                time.sleep(1)
+                sleep(1)
                 rc = win32event.WaitForSingleObject(self.hWaitStop, 4000)
+
             inspector.shutdown_me(1, '')
     return AppServerSvc
 
@@ -58,10 +59,7 @@ if __name__ == "__main__":
     try:
         if len(sys.argv) == 1 and not devMode:
             if homeDir.endswith('system32/'):
-                # Server 2012 != Win 10
-                homeDir = os.path.dirname(sys.executable) + '/'
-
-            from conf import cfg
+                homeDir = os.path.dirname(sys.executable) + '/' # Server 2012 != Win 10
 
             AppServerSvc = svc_init()
             servicemanager.Initialize()
@@ -69,18 +67,15 @@ if __name__ == "__main__":
             servicemanager.StartServiceCtrlDispatcher()
         else:
             if 'install' in sys.argv or 'remove' in sys.argv or 'update' in sys.argv:
-                from conf import homeDir, config, get_svc_params
-
-                svcParams = get_svc_params()
+                from conf import homeDir, config
                 AppServerSvc = svc_init()
                 win32serviceutil.HandleCommandLine(AppServerSvc)
 
             elif 'help' in sys.argv:
                 raise Exception('Show help')
             elif 'run' in sys.argv:
-                from conf import *
+                from conf import cfg, log
 
-                svcParams = get_svc_params()
                 if devMode:
                     print('\n!#RUNNING IN DEVELOPER MODE\n')
                     log.setLevel(10)
@@ -89,9 +84,11 @@ if __name__ == "__main__":
                 raise Exception('Show help')
 
     except Exception as e:
-        print(traceback.format_exc())
+        e = traceback.format_exc()
+        print(e)
         with open(homeDir+'error.txt','w') as file:
             file.write(str(e))
+
         print(f'\nUsage: {os.path.basename(sys.argv[0])} [options]\n'
               'Options:\n'
               ' run : запуск через консоль\n'

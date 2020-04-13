@@ -3,13 +3,19 @@ from logging.handlers import RotatingFileHandler
 import sys, time
 import traceback
 
+
 homeDir = sys.argv[0][:sys.argv[0].replace('\\', '/').rfind('/')+1]
+if hasattr(sys, "_MEIPASS"):
+    dataDir = sys._MEIPASS + '/'
+else:
+    dataDir = './'
+
 cfg = {
     "notify": {
         'proxy': None,
         "tmpl": {}
     },
-    "tasks": {"jobList": {}}
+    "tasks": {"jobList": {}, "diskTask": {}}
 }
 default = {
     "notify" : {
@@ -34,11 +40,11 @@ default = {
         "intervalCheckMin": "10",
         "active": "3",
         "// will do all": "",
-        "1": "diskUsage",
+        "1": "disk_C",
         "2": "myApp",
         "3": "myHttpServer"
     },
-    "diskUsage" : {
+    "disk_C" : {
         "// Free space limit in GB": "",
         "disk": "C:\\",
         "warning": "30",
@@ -142,7 +148,7 @@ def check_sections(config: configparser.RawConfigParser):
                     print('Create new section [%s]' %i)
                     edited = writeSection(i,default[i])
                     if i == 'taskList':
-                        for y in ['diskUsage','myApp','myHttpServer']:
+                        for y in ['disk_C','myApp','myHttpServer']:
                             try:
                                 edited = writeSection(y, default[y])
                             except Exception as e:
@@ -154,7 +160,7 @@ def check_sections(config: configparser.RawConfigParser):
 
         if edited:
             print("WARNING: Были созданы новые секции в файле конфигурации "
-                  "Для их действия запустите коннектор заново.")
+                  "Для их действия запустите приложение заново.")
             time.sleep(3)
             raise SystemExit(1)
     except Exception as e:
@@ -267,14 +273,14 @@ def validate(config: configparser.RawConfigParser, log: logging.Logger) -> dict:
 
     # check tasks settings and create tasks list
     for task in taskList:
-        if task == 'diskUsage':
-            cfg["tasks"]["diskTask"] = {}
+        if config.has_option(task, 'disk'):
+            cfg["tasks"]["diskTask"][task] = {}
+            tmp = cfg["tasks"]["diskTask"][task]
             try:
-                cfg["tasks"]["diskTask"]["diskWarn"] = config.getint('diskUsage', "Warning")
-                cfg["tasks"]["diskTask"]["critFree"] = config.getint('diskUsage', "Critical")
-                cfg["tasks"]["diskTask"]["diskUsage"] = config.get('diskUsage', "disk").replace('\\', '/') + '/'
-                log.info(f'Задан diskUsage. Папка: {cfg["tasks"]["diskTask"]["diskUsage"]}.'
-                         f' Лимит: {cfg["tasks"]["diskTask"]["diskWarn"]} GB')
+                tmp["diskWarn"] = config.getint(task, "Warning")
+                tmp["critFree"] = config.getint(task, "Critical")
+                tmp["diskUsage"] = config.get(task, "disk").replace('\\', '/') + '/'
+                log.info(f'monitoring disk space: {tmp["diskUsage"]}')
 
             except Exception as e:
                 log.error(f"Проверьте параметры: {e}")
@@ -355,8 +361,7 @@ class Templater:
         body = self.tmpl[appName][event.lower()]
         for appName in self.legendTmpl.values():
             for k, v in appName.items():
-                body = body.replace("{{%s}}" % k, str(v))
-        print(body)
+                body = body.replace("{{%s}}" % k, str(v), -1)
         return body
 
 class Notify:
@@ -414,6 +419,7 @@ def load_notifier(cfg: dict, log: logging.Logger) -> Notify:
     except Exception as e:
         log.error(f'Fail load notifier: {e}')
         raise SystemExit(1)
+
 
 config = open_config()
 check_sections(config)

@@ -1,13 +1,14 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 block_cipher = None
+datas = [('README.md', 'docs'), ('CHANGES.md', 'docs'), ('src/notifier/chat_ava.ico', 'notifier')]
 
 
 a = Analysis(['src\\AppWatch.py'],
              pathex=['./src'],
              binaries=[],
-             datas=[('README.md', 'CHANGES.md')],
-             hiddenimports=['win32timezone', 'pkg_resources.py2_warn'],
+             datas=datas,
+             hiddenimports=['win32timezone', 'pkg_resources.py2_warn', 'plyer.platforms.win.notification'],
              hookspath=[],
              runtime_hooks=[],
              excludes=['dummy_thread', 'setuptools', 'cryptography', 'lib2to3', '_cffi_backend', 'win32ui', 'win32trace'],

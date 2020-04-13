@@ -10,7 +10,6 @@ from email.mime.multipart import MIMEMultipart
 import smtplib
 import re
 
-
 from conf import configparser, log, templater
 
 

@@ -4,44 +4,62 @@ from threading import Thread
 from subprocess import Popen, PIPE, DEVNULL
 import signal, shutil, os, sys
 import traceback
+# import six
 
 import requests
+# from win10toast import ToastNotifier
+from plyer import notification
+import pystray
 
 from __init__ import __version__
-from conf import cfg, log, notify, templater
+from conf import cfg, log, notify, templater, homeDir, dataDir
 
 
 localName = cfg['notify']['localName']
 localIp = cfg['notify']['localIp']
 intervalCheckMin = cfg['tasks']['intervalCheckMin']
 sendedNotify = {}
+# toaster = ToastNotifier()
 
+def new_toast(title: str, msg: str):
+    try:
+        # toaster.show_toast("AppWatch", msg=msg, duration=20, threaded=False, icon_path=None)
+        notification.notify(
+            title=title,
+            message=msg,
+            app_name='AppWatch',
+            app_icon=f'{dataDir}notifier/chat_ava.ico',
+            timeout=10
+        )
+    except Exception as e:
+        log.error(f"Fail to show windows notification: {e}")
 
 # ловит ctrl-C. Останавливает модули в нужном порядке
 def shutdown_me(signum, frame):
     log.warning('Получена команда завершения работы')
     os._exit(1)
 
-def send_notify(app, event, body):
+def send_notify(taskName, event, body):
     try:
         # decorator?
+        a = sendedNotify
         now = dtime.datetime.now()
-        if app not in sendedNotify: sendedNotify[app] = {}
-        if event not in sendedNotify[app]:
-            sendedNotify[app][event] = now
+        if taskName not in sendedNotify: sendedNotify[taskName] = {}
+        if event not in sendedNotify[taskName]:
+            sendedNotify[taskName][event] = now
         else:
-            delta = now - sendedNotify[app][event]
+            delta = now - sendedNotify[taskName][event]
             if delta < resendTime:
                 log.info(f"Отчёт по событию {event} уже был отправлен.")
                 return
 
-        log.debug(f"Создание отчёта по событию {app}: {event}")
-        if not notify.send_notify(app, event, body):
-            del sendedNotify[app][event]
+        log.debug(f"Создание отчёта по событию {taskName}: {event}")
+        if not notify.send_notify(taskName, event, body):
+            del sendedNotify[taskName][event]
 
     except Exception as e:
         log.error(f"Fail send notify: {e}")
-        del sendedNotify[app][event]
+        del sendedNotify[taskName][event]
 
 def process_inspector():
     def is_alive(exe):
@@ -52,7 +70,8 @@ def process_inspector():
         result = stdout.split()[0].split("\\n")[-1]
         return result.lower() == exe
 
-    def restart(data, job, isDead=False):
+    def restart(job, isDead=False):
+        data = ""
         status = 0
         failList[app]['attemp'] += 1
         if not isDead:
@@ -62,14 +81,14 @@ def process_inspector():
                 while is_alive(exe):
                     sleep(1)
                     n += 1
-                    if n > 100: raise Exception(f"Не удалось убить процесс {app} : {exe}")
+                    if n > 100: raise Exception(f"Не удалось убить процесс {app}: {exe}")
             except Exception as e:
                 data = f'Не удалось перезапустить процесс: {e}\n'
                 log.error(data)
                 status = 2
 
         if status == 0:
-            log.debug(f"Запуск приложения {exe}")
+            log.debug(f"Запуск приложения {app}")
             whatStart = job['whatStart']
             if whatStart == 'script':
                  target = job['script']
@@ -83,7 +102,7 @@ def process_inspector():
                 try:
                     os.system(f"start cmd /c {target}")
                 except Exception as e:
-                    data = f"Не удалось перезапусть процессня: {exe} ({app}): {e}\n"
+                    data = f"Не удалось перезапусть процесс: {exe} ({app}): {e}\n"
                     status = 3
                     log.error(data)
             else:
@@ -119,13 +138,15 @@ def process_inspector():
             if status == 0:
                 sleep(restartTime)
                 if is_alive(exe):
-                    data += ' выполнена успешно.\n'
+                    data += 'Перезапуск приложения выполнено успешно.\n'
                     failList[app]['isAlive'] = False
                     failList[app]['attemp'] -= 1
                     log.info(data)
                 else:
                     data = f"Не удалось перезапусть {app}: он вновь падает\n"
                     log.error(data)
+
+        new_toast(app, data)
         return data
 
     log.debug("process_inspector started")
@@ -150,13 +171,13 @@ def process_inspector():
 
                 isAlive = is_alive(exe)
                 if isAlive:
-                    log.debug(f"Найден процесс {app}. Запрос статуса.")
+                    log.debug(f"Found {app}. Check http status")
                     try:
                         res = requests.get(url, timeout=10)
                         if res.status_code != 200:
                             raise Exception(f"Server return status {res.status_code}")
 
-                        log.debug(f"процесс {app} работает.")
+                        log.debug(f"{app} is fine.")
 
                         if not failList[app]['isAlive']:
                             continue
@@ -165,20 +186,25 @@ def process_inspector():
                             data = templater.tmpl_fill(selfName, 'alive')
                     except Exception as e:
                         status = 1
-                        data = f"Процесс {app} не отвечает или вернул не верный статус: {e}"
+                        data = f"{app} не отвечает или вернул не верный статус. Предпринята попытка перезапуска\n"
+                        new_toast(f'Презапуск {app}', data)
                         log.warning(data)
-                        body = templater.tmpl_fill(selfName, "badAnswer")
+
+                        body = templater.tmpl_fill(selfName, "badAnswer").replace("{{app}}", app, -1)
                         failList[app]['isAlive'] = True
 
                     if status != 0 and doRestart:
-                        data = restart(data, job)
+                        data += restart(job)
                         body += data
 
                     send_notify(selfName, "badAnswer", body)
                 elif not isAlive and alwaysWork:
-                    body = templater.tmpl_fill(selfName, 'notFound')
-                    log.warning(f"Отсутсвует обязательный процесс {app}. Попытка запуска")
-                    data = restart('Попытка перезапуска', job, isDead=True)
+                    body = templater.tmpl_fill(selfName, 'notFound').replace("{{app}}", app, -1)
+                    data = f"Отсутсвует обязательныое приложение {app}. Предпринята попытка запуска\n"
+                    log.warning(data)
+                    new_toast(f'Запуск {app}', data)
+
+                    data += restart(job, isDead=True)
                     body += data
                     send_notify(selfName, 'notFound', body)
 
@@ -209,55 +235,79 @@ def license_inspector():
                     body = templater.tmpl_fill(selfName, 'error')
                     body = body.replace('{{uid}}', uid).replace('{{app}}', app)
 
+                    new_toast(app, 'Ошибка лицензии')
                     send_notify(selfName, 'error', body)
                     break
                 else:
                     pass
-                log.debug(f"Корректная лицензия {app}")
 
             except Exception as e:
                 if e.errno == 2:
                     log.warning(f"Не найден журнал лицензии {app}")
                 else:
                     log.error("Ошибка чтения журнала лицензии %s: %s" % (app, e))
-
         sleep(intervalCheckMin*2)
 
 def disk_inspector():
+    def fill_tmpl(event: str) -> str:
+        body = templater.tmpl_fill(selfName, event)
+        body = body.replace('{{critFree}}', str(critFree), -1)
+        body = body.replace('{{diskUsage}}', diskUsage, -1)
+        body = body.replace('{{diskFree}}', str(diskFree), -1)
+        return body.replace('{{diskWarn}}', str(diskWarn), -1)
+
+
     log.debug("disk_inspector started")
     selfName = 'disk_inspector'
-    critFree = cfg['tasks']['diskTask']['critFree']
-    diskUsage = cfg['tasks']['diskTask']['diskUsage']
-    diskWarn = cfg['tasks']['diskTask']['diskWarn']
-    templater.extend_legend(selfName, {"critFree": critFree, "diskUsage": diskUsage, "diskWarn": diskWarn, "diskFree": 0 })
 
     while True:
-        diskFree = round(shutil.disk_usage(diskUsage).free / 1073741824, 2)
-        templater.legendTmpl[selfName]["diskFree"] = diskFree
-        if diskFree < critFree:
-            log.error(f"Критически мало места! Осталось всего: {diskFree}")
-            event = 'critFree'
-            body = templater.tmpl_fill(selfName, event)
-            send_notify(selfName, event, body)
-        elif diskFree < diskWarn:
-            log.warning(f"Заканчивается место. Свободно на диске: {diskFree}GB")
-            event = 'diskWarn'
-            body = templater.tmpl_fill(selfName, event)
-            send_notify(selfName, event, body)
-        elif diskFree > diskWarn:
-            log.info("Свободно места %s GB. До лимита ещё: %s GB" % (diskFree, round(diskFree - diskWarn,2)))
+        for name, task in cfg['tasks']['diskTask'].items():
+            critFree = task['critFree']
+            diskUsage = task['diskUsage']
+            diskWarn = task['diskWarn']
 
-        #TODO maybe use custom timer
+            try:
+                diskFree = round(shutil.disk_usage(diskUsage).free / 1073741824, 2)
+                if diskFree < critFree:
+                    log.error(f"Критически мало места! Осталось всего: {diskFree}")
+                    event = 'critFree'
+                    body = fill_tmpl(event)
+
+                    new_toast(diskUsage, f"Критически мало места! Осталось всего: {diskFree}")
+                    send_notify(name, event, body)
+                elif diskFree < diskWarn:
+                    log.warning(f"Заканчивается место. Свободно на диске: {diskFree}GB")
+                    event = 'diskWarn'
+                    body = fill_tmpl(event)
+
+                    new_toast(diskUsage, f"Заканчивается место. Свободно на диске: {diskFree}GB")
+                    send_notify(name, event, body)
+                elif diskFree > diskWarn:
+                    log.info("Свободно места %s GB. До лимита ещё: %s GB" % (diskFree, round(diskFree - diskWarn,2)))
+
+            except Exception as e:
+                log.critical(f'disk_inspector: {traceback.format_exc()}')
+                raise SystemExit(1)
+
+        # TODO maybe use custom timer
         sleep(intervalCheckMin)
+
+# def tray_icon():
+#     image = Image.open(f'{dataDir}notifier/chat_ava.ico')
+#     icon = pystray.Icon("name", image, "title")
+#     icon.run()
 
 if __name__ != "__main__":
     resendTime = dtime.timedelta(minutes=cfg['notify']['resendTime'])
 
-    if 'diskTask' in cfg['tasks']:
+    # ht = Thread(target=tray_icon, name='tray_icon')
+    # ht.start()
+
+    if cfg['tasks']['diskTask'] != {}:
         ht3 = Thread(target=disk_inspector, name='disk_inspector')
         ht3.start()
 
-    if 'jobList' in cfg['tasks']:
+    if cfg['tasks']['jobList'] != {}:
         jobList = cfg['tasks']['jobList']
         ht1 = Thread(target=process_inspector, name='process_inspector')
         ht1.start()
