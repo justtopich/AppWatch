@@ -169,6 +169,7 @@ def process_inspector():
                 status = 0
                 body = ''
 
+                log.info(f'Check app {app}')
                 isAlive = is_alive(exe)
                 if isAlive:
                     log.debug(f"Found {app}. Check http status")
@@ -197,7 +198,7 @@ def process_inspector():
                         data += restart(job)
                         body += data
 
-                    send_notify(selfName, "badAnswer", body)
+                    send_notify(app, "badAnswer", body)
                 elif not isAlive and alwaysWork:
                     body = templater.tmpl_fill(selfName, 'notFound').replace("{{app}}", app, -1)
                     data = f"Отсутсвует обязательныое приложение {app}. Предпринята попытка запуска\n"
@@ -206,54 +207,55 @@ def process_inspector():
 
                     data += restart(job, isDead=True)
                     body += data
-                    send_notify(selfName, 'notFound', body)
+                    send_notify(app, 'notFound', body)
 
             sleep(intervalCheckMin)
         except Exception as e:
             e = traceback.format_exc()
-            log.error(str(e))
+            log.critical(str(e))
             break
 
-def license_inspector():
-    log.debug("license_inspector started")
-    selfName = 'license_inspector'
+def log_inspector():
+    log.debug("log_inspector started")
+    selfName = 'log_inspector'
     while True:
-        log.info("Проверка лицензий")
-        for job in jobList.values():
-            app = job['task']
-            path = job['path']
-            log.debug(f"Проверка лицензии {app}")
-            try:
-                with open(path+'license.log', encoding='utf-8') as LicLog:
-                    text = LicLog.read()
+        try:
+            for taskName, task in cfg['tasks']['logTask'].items():
+                log.debug(f"Check log {taskName}")
+                logFile = task['file']
+                templates = task['tmpl']
 
-                if 'LICENSE: Error' in text or 'No license found' in text:
-                    log.error(f"Ошибка лицензии {app}")
-                    with open(path + 'uid/uid.dat', encoding='utf-8') as uidDat:
-                        uid = uidDat.read()
+                try:
+                    #TODO open if file is changed
+                    with open(logFile, encoding='utf-8') as f:
+                        cnt = f.read()
 
-                    body = templater.tmpl_fill(selfName, 'error')
-                    body = body.replace('{{uid}}', uid).replace('{{app}}', app)
+                    for tmpl in templates:
+                        tmpl = templater.tmpl[selfName][tmpl]
+                        if tmpl in cnt:
+                            log.error(f"Ошибка лицензии {taskName}")
+                            body = templater.tmpl_fill(selfName, 'error').replace('{{app}}', taskName, -1)
 
-                    new_toast(app, 'Ошибка лицензии')
-                    send_notify(selfName, 'error', body)
-                    break
-                else:
-                    pass
+                            new_toast(taskName, 'Ошибка лицензии')
+                            send_notify(taskName, 'error', body)
 
-            except Exception as e:
-                if e.errno == 2:
-                    log.warning(f"Не найден журнал лицензии {app}")
-                else:
-                    log.error("Ошибка чтения журнала лицензии %s: %s" % (app, e))
-        sleep(intervalCheckMin*2)
+                except FileNotFoundError:
+                    log.error(f"Не найден журнал лицензии {taskName}")
+                except Exception as e:
+                    log.error(f"Ошибка чтения журнала лицензии {taskName}: {e}")
+
+            sleep(intervalCheckMin*2)
+        except Exception as e:
+            e = traceback.format_exc()
+            log.critical(str(e))
+            break
 
 def disk_inspector():
     def fill_tmpl(event: str) -> str:
         body = templater.tmpl_fill(selfName, event)
         body = body.replace('{{critFree}}', str(critFree), -1)
-        body = body.replace('{{diskUsage}}', diskUsage, -1)
         body = body.replace('{{diskFree}}', str(diskFree), -1)
+        body = body.replace('{{diskUsage}}', diskUsage, -1)
         return body.replace('{{diskWarn}}', str(diskWarn), -1)
 
 
@@ -283,7 +285,7 @@ def disk_inspector():
                     new_toast(diskUsage, f"Заканчивается место. Свободно на диске: {diskFree}GB")
                     send_notify(name, event, body)
                 elif diskFree > diskWarn:
-                    log.info("Свободно места %s GB. До лимита ещё: %s GB" % (diskFree, round(diskFree - diskWarn,2)))
+                    log.info(f"Свободно места {diskFree} GB")
 
             except Exception as e:
                 log.critical(f'disk_inspector: {traceback.format_exc()}')
@@ -307,12 +309,14 @@ if __name__ != "__main__":
         ht3 = Thread(target=disk_inspector, name='disk_inspector')
         ht3.start()
 
+    if cfg['tasks']['logTask'] != {}:
+        ht2 = Thread(target=log_inspector, name='log_inspector')
+        ht2.start()
+
     if cfg['tasks']['jobList'] != {}:
         jobList = cfg['tasks']['jobList']
         ht1 = Thread(target=process_inspector, name='process_inspector')
         ht1.start()
-        ht2 = Thread(target=license_inspector, name='license_inspector')
-        ht2.start()
 
     log.info("AppWatch started. Version " + __version__)
 

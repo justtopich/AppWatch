@@ -15,7 +15,7 @@ cfg = {
         'proxy': None,
         "tmpl": {}
     },
-    "tasks": {"jobList": {}, "diskTask": {}}
+    "tasks": {"jobList": {}, "diskTask": {}, "logTask": {}}
 }
 default = {
     "notify" : {
@@ -38,11 +38,12 @@ default = {
     },
     "taskList" : {
         "intervalCheckMin": "10",
-        "active": "3",
+        "active": "4",
         "// will do all": "",
         "1": "disk_C",
-        "2": "myApp",
-        "3": "myHttpServer"
+        "2": "app_log",
+        "3": "myApp",
+        "4": "myHttpServer"
     },
     "disk_C" : {
         "// Free space limit in GB": "",
@@ -50,9 +51,16 @@ default = {
         "warning": "30",
         "critical": "10"
     },
+    "app_log" : {
+        "file": "c:\\app\\events.log",
+        "templates": "event1; event2",
+        "// list of events what appWatch must looking in file": "",
+    },
     "myApp" : {
+        "licenseFile": "license.log",
+        "// if use, will check this file for error": "",
         "alwaysWork": "false",
-        "// not check if proccess not running": "",
+        "// not check if process not running": "",
         "doRestart": "true",
         "// if run and bad check": "if false will only notify",
         "timeForRestartingSec": "20",
@@ -78,9 +86,6 @@ default = {
         "url": "http://127.0.1.1:7252/uptime",
         "exe": "MyServer.exe",
         "whatStart": "service",
-        "path": "",
-        "exeKey": "",
-        "script": "",
         "service": "HttpServer-srv"
     },
     "logging" : {
@@ -148,7 +153,7 @@ def check_sections(config: configparser.RawConfigParser):
                     print('Create new section [%s]' %i)
                     edited = writeSection(i,default[i])
                     if i == 'taskList':
-                        for y in ['disk_C','myApp','myHttpServer']:
+                        for y in ['disk_C','app_log','myApp','myHttpServer']:
                             try:
                                 edited = writeSection(y, default[y])
                             except Exception as e:
@@ -209,6 +214,7 @@ def create_logger(config: configparser.RawConfigParser) -> logging.Logger:
 
 # check general settings
 def validate(config: configparser.RawConfigParser, log: logging.Logger) -> dict:
+    # notify & proxy
     try:
         cfg["notify"]["localName"] = config.get("notify", "localName")
         cfg["notify"]["localIp"] = config.get("notify", "localIp")
@@ -247,7 +253,7 @@ def validate(config: configparser.RawConfigParser, log: logging.Logger) -> dict:
         log.error("%s" % e)
         raise SystemExit(1)
 
-    # check tasks
+    # check scheduler
     taskList = []
     try:
         active = config.getint('taskList', "active")
@@ -262,6 +268,7 @@ def validate(config: configparser.RawConfigParser, log: logging.Logger) -> dict:
                     task = config.get('taskList', str(n+1))
                     if not config.has_section(task):
                         log.error("Задано несуществующее задание " + task)
+                        raise SystemExit(1)
                     else:
                         taskList.append(task)
                 except:
@@ -273,31 +280,45 @@ def validate(config: configparser.RawConfigParser, log: logging.Logger) -> dict:
 
     # check tasks settings and create tasks list
     for task in taskList:
+        # disk tasks
         if config.has_option(task, 'disk'):
-            cfg["tasks"]["diskTask"][task] = {}
-            tmp = cfg["tasks"]["diskTask"][task]
+            cfg["tasks"]["diskTask"][task] = tmp = {}
             try:
                 tmp["diskWarn"] = config.getint(task, "Warning")
                 tmp["critFree"] = config.getint(task, "Critical")
                 tmp["diskUsage"] = config.get(task, "disk").replace('\\', '/') + '/'
                 log.info(f'monitoring disk space: {tmp["diskUsage"]}')
+                continue
 
             except Exception as e:
-                log.error(f"Проверьте параметры: {e}")
-            continue
+                log.error(f"Задание {task} отклонено. Проверьте параметры: {e}")
+                raise SystemExit(1)
 
+        # log tasks
+        if config.has_option(task, 'file'):
+            try:
+                cfg["tasks"]["logTask"][task] = tmp = {}
+                tmp["file"] = config.get(task, "file")
+                tmp["tmpl"] = [i.strip() for i in config.get(task, "templates").split(';')]
+                continue
+
+            except Exception as e:
+                log.error(f"Задание {task} отклонено. Проверьте параметры: {e}")
+                raise SystemExit(1)
+
+        # process tasks
         jobListTmp = {}
         try:
             jobListTmp['task'] = task
             jobListTmp['url'] = config.get(task, "url")
-            jobListTmp['exe'] = config.get(task, "Exe")
-            jobListTmp['path'] = config.get(task, "path").replace('\\', '/') + '/'
+            jobListTmp['exe'] = config.get(task, "exe")
             jobListTmp['doRestart'] = config.getboolean(task, "doRestart")
             jobListTmp['alwaysWork'] = config.getboolean(task, "alwaysWork")
             jobListTmp['restartTime'] = config.getint(task, "timeForRestartingSec")
             jobListTmp['whatStart'] = whatStart = config.get(task, "whatStart")
 
             if whatStart == 'exe':
+                jobListTmp['path'] = config.get(task, "path").replace('\\', '/') + '/'
                 jobListTmp['exeKey'] = config.get(task, "exeKey")
             elif whatStart == 'script':
                 jobListTmp['script'] = config.get(task, "script").replace('\\', '/')
@@ -305,6 +326,9 @@ def validate(config: configparser.RawConfigParser, log: logging.Logger) -> dict:
                 jobListTmp['service'] = config.get(task, "service")
             else:
                 log.error('Wrong parameter whatStart. Allowed: exe, script, service')
+
+            if config.has_option(task, 'licenseFile'):
+                jobListTmp['licenseFile'] = config.get(task, 'licenseFile')
 
             cfg["tasks"]["jobList"][task] = jobListTmp
         except Exception as e:
@@ -381,7 +405,8 @@ def load_notifier(cfg: dict, log: logging.Logger) -> Notify:
         name = cfg["notify"]["type"]
         if name != '':
             log.info(f'Load notifier {name}')
-            # need for pyInstaller
+            #TODO import *
+            # but now for pyInstaller need like
             import notifier.email
             import notifier.discord
             import notifier.slack

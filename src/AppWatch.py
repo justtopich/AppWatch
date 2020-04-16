@@ -9,12 +9,13 @@ import win32service
 import win32serviceutil
 
 from __init__ import __version__
-from conf import get_svc_params
+from conf import get_svc_params, dataDir, homeDir
+
 
 # Windows запускает модули exe из папки пользователя
 # Папка должна определяться только исполняемым файлом
 keys = os.path.split(os.path.abspath(os.path.join(os.curdir, __file__)))
-homeDir = sys.argv[0][:sys.argv[0].replace('\\', '/').rfind('/')+1]
+# homeDir = sys.argv[0][:sys.argv[0].replace('\\', '/').rfind('/')+1]
 appName = keys[1][:keys[1].find('.')].lower()
 svcParams = get_svc_params()
 del keys
@@ -71,6 +72,18 @@ if __name__ == "__main__":
                 AppServerSvc = svc_init()
                 win32serviceutil.HandleCommandLine(AppServerSvc)
 
+            elif 'doc' in sys.argv:
+                from shutil import copy2
+                print('Export documentation to ./docs')
+
+                try:
+                    os.mkdir(f'{homeDir}docs')
+                except:
+                    pass
+
+                for i in os.listdir(f'{dataDir}docs'):
+                    copy2(f'{dataDir}docs/{i}', f'{homeDir}docs/{i}')
+
             elif 'help' in sys.argv:
                 raise Exception('Show help')
             elif 'run' in sys.argv:
@@ -80,6 +93,7 @@ if __name__ == "__main__":
                     print('\n!#RUNNING IN DEVELOPER MODE\n')
                     log.setLevel(10)
                 import inspector
+
             else:
                 raise Exception('Show help')
 
@@ -91,8 +105,9 @@ if __name__ == "__main__":
 
         print(f'\nUsage: {os.path.basename(sys.argv[0])} [options]\n'
               'Options:\n'
-              ' run : запуск через консоль\n'
-              ' install : установка службы windows\n'
-              ' remove : удалить службу windows\n'
-              ' update: обновить службу windows\n')
+              ' run : start me\n'
+              ' doc : get documentation\n'
+              ' install : install as windows service\n'
+              ' remove : delete windows service\n'
+              ' update: update windows service\n')
         sleep(2)

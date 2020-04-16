@@ -1,3 +1,9 @@
+Look new releases here [https://github.com/justtopich/AppWatch](https://github.com/justtopich/AppWatch)
+
+------
+
+
+
 ###  TODO
 
  * add checkStatus & checkProcces. Вариативность проверки статуса, либо процесса,
@@ -5,6 +11,14 @@
  * create GUI for display notification when running as service
 
 
+
+### [build20200416]
+
+- add console key ***doc***. Now you can get documentation by console.
+
+- fix running if no one task is set
+- fix not changing *diskFree* in templates
+- remove license inspector.  Add log inspector
 
 ###  [build20200413]
 
