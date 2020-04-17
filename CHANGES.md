@@ -1,4 +1,4 @@
-Look new releases here [https://github.com/justtopich/AppWatch](https://github.com/justtopich/AppWatch)
+[https://github.com/justtopich/AppWatch](https://github.com/justtopich/AppWatch)
 
 ------
 
@@ -12,10 +12,15 @@ Look new releases here [https://github.com/justtopich/AppWatch](https://github.c
 
 
 
+### [build20200417]
+
+- Несколько заданий могут ссылаться на одно задание по разбору логов.
+- add parameter *timeForResponse*
+- Templater have new method: *get_tmpl*
+
 ### [build20200416]
 
 - add console key ***doc***. Now you can get documentation by console.
-
 - fix running if no one task is set
 - fix not changing *diskFree* in templates
 - remove license inspector.  Add log inspector
