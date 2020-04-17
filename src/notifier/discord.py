@@ -7,7 +7,7 @@
 
 import traceback
 import requests
-from conf import configparser, log, templater
+from conf import configparser, log
 
 
 class Notify:

@@ -10,13 +10,6 @@ if hasattr(sys, "_MEIPASS"):
 else:
     dataDir = './'
 
-cfg = {
-    "notify": {
-        'proxy': None,
-        "tmpl": {}
-    },
-    "tasks": {"jobList": {}, "diskTask": {}, "logTask": {}}
-}
 default = {
     "notify" : {
         "type": "email",
@@ -57,13 +50,12 @@ default = {
         "// list of events what appWatch must looking in file": "",
     },
     "myApp" : {
-        "licenseFile": "license.log",
-        "// if use, will check this file for error": "",
         "alwaysWork": "false",
         "// not check if process not running": "",
         "doRestart": "true",
         "// if run and bad check": "if false will only notify",
         "timeForRestartingSec": "20",
+        "// time for waiting to check again": "",
         "url": "https://myHost.ru",
         "// must return status 200": "",
         "exe": "myApp.exe",
@@ -76,13 +68,15 @@ default = {
         "script": "c:\\app\\start.bat",
         "// if whatStart=script": "",
         "service": "appDeamon",
-        "// windows service name": ""
+        "// if whatStart=service": ""
     },
     "myHttpServer" : {
         "alwaysWork": "true",
         "// start process if not running": "",
         "doRestart": "true",
         "timeForRestartingSec": "30",
+        "timeForResponse": "30",
+        "//not required. Default is 10": "",
         "url": "http://127.0.1.1:7252/uptime",
         "exe": "MyServer.exe",
         "whatStart": "service",
@@ -95,6 +89,13 @@ default = {
         "LogMaxSizeKbs" : "10240",
         "logMaxFiles" : "5"
     }
+}
+cfg = {
+    "notify": {
+        'proxy': None,
+        "tmpl": {}
+    },
+    "tasks": {"jobList": {}, "diskTask": {}, "logTask": {}}
 }
 
 # сбор параметров для службы windows
@@ -214,6 +215,22 @@ def create_logger(config: configparser.RawConfigParser) -> logging.Logger:
 
 # check general settings
 def validate(config: configparser.RawConfigParser, log: logging.Logger) -> dict:
+    def log_task(sec:str, parent:str=None):
+        try:
+            if parent:
+                if 'path' not in jobListTmp:
+                    raise Exception(f'not found parameter [{parent}]path')
+                cfg["tasks"]["logTask"][parent] = tmp = {}
+                tmp["file"] = config.get(sec, "file").replace('{{path}}', jobListTmp['path'])
+            else:
+                cfg["tasks"]["logTask"][sec] = tmp = {}
+                tmp["file"] = config.get(sec, "file")
+
+            tmp["tmpl"] = [i.strip() for i in config.get(sec, "templates").split(';')]
+        except Exception as e:
+            raise Exception(f"Задание {sec} отклонено. Проверьте параметры: {e}")
+
+
     # notify & proxy
     try:
         cfg["notify"]["localName"] = config.get("notify", "localName")
@@ -275,40 +292,28 @@ def validate(config: configparser.RawConfigParser, log: logging.Logger) -> dict:
                     log.warning(f"В taskList нет задания %{n+1}")
                     raise SystemExit(1)
     except Exception as e:
-        log.warning(f"Проверьте параметры снкции taskList: {e}")
+        log.warning(f"Проверьте параметры секции taskList: {e}")
         raise SystemExit(1)
 
     # check tasks settings and create tasks list
     for task in taskList:
-        # disk tasks
-        if config.has_option(task, 'disk'):
-            cfg["tasks"]["diskTask"][task] = tmp = {}
-            try:
+        try:
+            # disk tasks
+            if config.has_option(task, 'disk'):
+                cfg["tasks"]["diskTask"][task] = tmp = {}
                 tmp["diskWarn"] = config.getint(task, "Warning")
                 tmp["critFree"] = config.getint(task, "Critical")
-                tmp["diskUsage"] = config.get(task, "disk").replace('\\', '/') + '/'
+                tmp["diskUsage"] = config.get(task, "disk")
                 log.info(f'monitoring disk space: {tmp["diskUsage"]}')
                 continue
 
-            except Exception as e:
-                log.error(f"Задание {task} отклонено. Проверьте параметры: {e}")
-                raise SystemExit(1)
-
-        # log tasks
-        if config.has_option(task, 'file'):
-            try:
-                cfg["tasks"]["logTask"][task] = tmp = {}
-                tmp["file"] = config.get(task, "file")
-                tmp["tmpl"] = [i.strip() for i in config.get(task, "templates").split(';')]
+            # log tasks
+            if config.has_option(task, 'file'):
+                log_task(task)
                 continue
 
-            except Exception as e:
-                log.error(f"Задание {task} отклонено. Проверьте параметры: {e}")
-                raise SystemExit(1)
-
-        # process tasks
-        jobListTmp = {}
-        try:
+            # process tasks
+            jobListTmp = {}
             jobListTmp['task'] = task
             jobListTmp['url'] = config.get(task, "url")
             jobListTmp['exe'] = config.get(task, "exe")
@@ -317,18 +322,31 @@ def validate(config: configparser.RawConfigParser, log: logging.Logger) -> dict:
             jobListTmp['restartTime'] = config.getint(task, "timeForRestartingSec")
             jobListTmp['whatStart'] = whatStart = config.get(task, "whatStart")
 
+            if config.has_option(task, 'timeForResponse'):
+                jobListTmp['respTime'] = config.getint(task, "timeForResponse")
+            else:
+                jobListTmp['respTime'] = 10
+
             if whatStart == 'exe':
-                jobListTmp['path'] = config.get(task, "path").replace('\\', '/') + '/'
                 jobListTmp['exeKey'] = config.get(task, "exeKey")
+                jobListTmp['path'] = config.get(task, "path").replace('\\', '/', -1)
+                if not jobListTmp['path'].endswith('/'):
+                    jobListTmp['path'] = jobListTmp['path'] + '/'
+
             elif whatStart == 'script':
-                jobListTmp['script'] = config.get(task, "script").replace('\\', '/')
+                jobListTmp['script'] = config.get(task, "script").replace('\\', '/', -1)
             elif whatStart == 'service':
                 jobListTmp['service'] = config.get(task, "service")
             else:
-                log.error('Wrong parameter whatStart. Allowed: exe, script, service')
+                raise Exception('Wrong parameter whatStart. Allowed: exe, script, service')
 
-            if config.has_option(task, 'licenseFile'):
-                jobListTmp['licenseFile'] = config.get(task, 'licenseFile')
+            if config.has_option(task, 'logInspector'):
+                jobListTmp['logInspector'] = config.get(task, 'logInspector')
+                jobListTmp['path'] = config.get(task, "path").replace('\\', '/', -1)
+                if not jobListTmp['path'].endswith('/'):
+                    jobListTmp['path'] = jobListTmp['path'] + '/'
+
+                log_task(jobListTmp['logInspector'], task)
 
             cfg["tasks"]["jobList"][task] = jobListTmp
         except Exception as e:
@@ -346,7 +364,7 @@ class Templater:
                 "localIp": cfg['notify']['localIp']
             }
         }
-        self.tmpl = {}
+        self._tmpl = {}
         self.__load_templates(log)
 
     def __load_templates(self, log: logging.Logger):
@@ -360,16 +378,16 @@ class Templater:
         try:
             config2.read(f"{homeDir}templates.cfg", encoding="utf-8")
             for s in config2.sections():
-                if s not in self.tmpl:
-                    self.tmpl[s] = {}
+                if s not in self._tmpl:
+                    self._tmpl[s] = {}
                 for p, v in config2.items(s):
-                    self.tmpl[s][p] = v
+                    self._tmpl[s][p] = v
         except Exception as e:
             print("Error to read configuration file:", str(traceback.format_exc()))
             time.sleep(3)
             raise SystemExit(1)
 
-    def extend_legend(self, appName: str, tmpl: dict):
+    def extend_legend(self, section: str, tmpl: dict):
         for newP, v in tmpl.items():
             if isinstance(v, dict):
                 raise Exception(f"Trying add multiple levels dict")
@@ -379,14 +397,22 @@ class Templater:
                     if newP.lower() == oldP.lower():
                         raise Exception(f"Templater legend already have {newP} for module {oldApp}")
                         
-        self.legendTmpl[appName] = tmpl.copy()
+        self.legendTmpl[section] = tmpl.copy()
 
-    def tmpl_fill(self, appName: str, event: str) -> str:
-        body = self.tmpl[appName][event.lower()]
-        for appName in self.legendTmpl.values():
-            for k, v in appName.items():
+    def tmpl_fill(self, section: str, name: str) -> str:
+        body = self._tmpl[section][name.lower()]
+        for sec in self.legendTmpl.values():
+            for k, v in sec.items():
                 body = body.replace("{{%s}}" % k, str(v), -1)
         return body
+
+    def get_tmpl(self, section:str, name:str) -> str:
+        try:
+            return self._tmpl[section][name]
+        except KeyError:
+            raise Exception(f'[{section}]{name} not found in templates')
+        except Exception as e:
+            raise Exception(f'Fail to get template [{section}]{name}: {e}')
 
 class Notify:
     def __init__(self, name: str):

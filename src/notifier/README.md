@@ -106,15 +106,19 @@ class Notify:
 
 #### templater: методы
 
-###### tmpl_fill(self, appName: str, event: str)
+###### tmpl_fill(section:str, name:str)
 
 Наполнение шаблона. **appName** и **event** указывают какой шаблон нужно использовать. Шаблон берётся из **templates.cfg** где каждая секция отвечает за конкретный модуль. Если вы хотите использовать свой шаблон, то в **appName** укажите название своего коннектора.
 
-###### extend_legend(self, appName: str, tmpl: dict)
+###### extend_legend(section:str, tmpl: dict)
 
 Добавление переменных для подстановки в шаблоны. Добавленные переменные templater будет подставляться во все шаблоны.
 
 ```extend_legend("MyConnector", {"var": "someStr"})```
+
+###### get_tmpl(section:str, name:str)
+
+Получить шаблон из **templates.cfg**.
 
 
 

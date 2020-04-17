@@ -93,7 +93,7 @@ def process_inspector():
             if whatStart == 'script':
                  target = job['script']
             elif whatStart == 'exe':
-                target = f"{path}{exe} {job['exeKey']}"
+                target = f"{job['path']}{exe} {job['exeKey']}"
             else:
                 target = ''
 
@@ -162,10 +162,10 @@ def process_inspector():
                 app = job['task']
                 url = job['url']
                 exe = job['exe'].lower()
-                path = job['path']
                 doRestart = job['doRestart']
                 alwaysWork = job['alwaysWork']
                 restartTime = job['restartTime']
+                respTime = job['respTime']
                 status = 0
                 body = ''
 
@@ -174,7 +174,7 @@ def process_inspector():
                 if isAlive:
                     log.debug(f"Found {app}. Check http status")
                     try:
-                        res = requests.get(url, timeout=10)
+                        res = requests.get(url, timeout=respTime)
                         if res.status_code != 200:
                             raise Exception(f"Server return status {res.status_code}")
 
@@ -221,7 +221,7 @@ def log_inspector():
     while True:
         try:
             for taskName, task in cfg['tasks']['logTask'].items():
-                log.debug(f"Check log {taskName}")
+                log.info(f"Check log {taskName}")
                 logFile = task['file']
                 templates = task['tmpl']
 
@@ -231,7 +231,7 @@ def log_inspector():
                         cnt = f.read()
 
                     for tmpl in templates:
-                        tmpl = templater.tmpl[selfName][tmpl]
+                        tmpl = templater.get_tmpl(selfName, tmpl)
                         if tmpl in cnt:
                             log.error(f"Ошибка лицензии {taskName}")
                             body = templater.tmpl_fill(selfName, 'error').replace('{{app}}', taskName, -1)
@@ -242,7 +242,7 @@ def log_inspector():
                 except FileNotFoundError:
                     log.error(f"Не найден журнал лицензии {taskName}")
                 except Exception as e:
-                    log.error(f"Ошибка чтения журнала лицензии {taskName}: {e}")
+                    log.error(f"Ошибка проверки журнала лицензии {taskName}: {e}")
 
             sleep(intervalCheckMin*2)
         except Exception as e:
