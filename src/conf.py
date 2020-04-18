@@ -1,14 +1,12 @@
-﻿import configparser, logging
-from logging.handlers import RotatingFileHandler
-import sys, time
-import traceback
+﻿from __init__ import (
+    sys,
+    sleep,
+    traceback,
+    configparser,
+    logging,
+    RotatingFileHandler,
+    homeDir)
 
-
-homeDir = sys.argv[0][:sys.argv[0].replace('\\', '/').rfind('/')+1]
-if hasattr(sys, "_MEIPASS"):
-    dataDir = sys._MEIPASS + '/'
-else:
-    dataDir = './'
 
 default = {
     "notify" : {
@@ -107,22 +105,22 @@ def get_svc_params():
             config.get("service", "description")]
     except Exception as e:
         log.error("Неправильно заданы параметры [service]: " + str(e))
-        time.sleep(3)
+        sleep(3)
         raise SystemExit(1)
 
 # Загружает конфиг
 def open_config() -> configparser.RawConfigParser:
     try:
-        config = open(homeDir+'AppWatch.cfg', encoding='utf-8')
+        open(f'{homeDir}AppWatch.cfg', encoding='utf-8')
     except IOError:
-        open(homeDir+'AppWatch.cfg', 'tw', encoding='utf-8')
+        open(f'{homeDir}AppWatch.cfg', 'tw', encoding='utf-8')
 
     config = configparser.RawConfigParser(comment_prefixes=('#', ';', '//'), allow_no_value=True)
     try:
-        config.read(homeDir+'AppWatch.cfg')
+        config.read(f'{homeDir}AppWatch.cfg')
     except Exception as e:
         print("Error to read configuration file:", str(e))
-        time.sleep(3)
+        sleep(3)
         raise SystemExit(1)
 
     return config
@@ -132,7 +130,7 @@ def writeSection(section:str, params:dict) -> bool:
         return val.lower()
 
     def configWrite():
-        with open(homeDir + 'AppWatch.cfg', "w") as configFile:
+        with open(f'{homeDir}AppWatch.cfg', "w") as configFile:
             config.write(configFile)
 
     print(f'Write section {section}')
@@ -167,11 +165,11 @@ def check_sections(config: configparser.RawConfigParser):
         if edited:
             print("WARNING: Были созданы новые секции в файле конфигурации "
                   "Для их действия запустите приложение заново.")
-            time.sleep(3)
+            sleep(3)
             raise SystemExit(1)
     except Exception as e:
         print("ERROR: Не удалось создать файл конфигурации", str(e))
-        time.sleep(3)
+        sleep(3)
         raise SystemExit(1)
 
 def create_logger(config: configparser.RawConfigParser) -> logging.Logger:
@@ -253,7 +251,7 @@ def validate(config: configparser.RawConfigParser, log: logging.Logger) -> dict:
                 if writeSection('proxy', default['proxy']):
                     print("WARNING: Были созданы новые секции в файле конфигурации "
                           "Для их действия запустите коннектор заново.")
-                    time.sleep(3)
+                    sleep(3)
                     raise SystemExit(1)
 
             cfg['notify']['proxy'] = {'http': {}, 'https': {}}
@@ -384,7 +382,7 @@ class Templater:
                     self._tmpl[s][p] = v
         except Exception as e:
             print("Error to read configuration file:", str(traceback.format_exc()))
-            time.sleep(3)
+            sleep(3)
             raise SystemExit(1)
 
     def extend_legend(self, section: str, tmpl: dict):
@@ -400,11 +398,16 @@ class Templater:
         self.legendTmpl[section] = tmpl.copy()
 
     def tmpl_fill(self, section: str, name: str) -> str:
-        body = self._tmpl[section][name.lower()]
-        for sec in self.legendTmpl.values():
-            for k, v in sec.items():
-                body = body.replace("{{%s}}" % k, str(v), -1)
-        return body
+        try:
+            body = self._tmpl[section][name.lower()]
+            for sec in self.legendTmpl.values():
+                for k, v in sec.items():
+                    body = body.replace("{{%s}}" % k, str(v), -1)
+            return body
+        except KeyError:
+            raise Exception(f'[{section}]{name} not found in templates')
+        except Exception as e:
+            raise Exception(f'Fail to get template [{section}]{name}: {e}')
 
     def get_tmpl(self, section:str, name:str) -> str:
         try:
@@ -433,19 +436,22 @@ def load_notifier(cfg: dict, log: logging.Logger) -> Notify:
             log.info(f'Load notifier {name}')
             #TODO import *
             # but now for pyInstaller need like
-            import notifier.email
-            import notifier.discord
-            import notifier.slack
-            notifier = getattr(__import__(f'notifier.{name}'), name)
-            notify = notifier.Notify(name)
+            # import notifier.email
+            # import notifier.discord
+            # import notifier.slack
+            # notifier = getattr(__import__(f'notifier.{name}'), name)
+            # notify = notifier.Notify(name)
 
             # на случай упаковки в бинарник, но тогда нужно всю стандартную либу включать
-            # dict_obj = {}
-            # with open(f'notifier/{name}.py', encoding='utf-8') as src:
-            #     scrCode = src.read()
-            #
+            dict_obj = {}
+            with open(f'{homeDir}notifier/{name}.py', encoding='utf-8') as src:
+                scrCode = src.read()
+
+            a = globals()
             # exec(scrCode, globals(), dict_obj)
             # notify = dict_obj['Notify'](name)
+            exec(scrCode, globals(), globals())
+            notify = a['Notify'](name)
 
             try:
                 if not config.has_section(name):
@@ -453,7 +459,7 @@ def load_notifier(cfg: dict, log: logging.Logger) -> Notify:
                     if writeSection(name, notify.defaultCfg):
                         print("WARNING: Были созданы новые секции в файле конфигурации "
                               "Для их действия запустите коннектор заново.")
-                        time. sleep(3)
+                        sleep(3)
                         raise SystemExit(1)
             except Exception as e:
                 log.error(f"Fail to load notify configuration: {e}")
@@ -472,9 +478,10 @@ def load_notifier(cfg: dict, log: logging.Logger) -> Notify:
         raise SystemExit(1)
 
 
-config = open_config()
-check_sections(config)
-log = create_logger(config)
-cfg = validate(config, log)
-templater = Templater(log)
-notify = load_notifier(cfg, log)
+if __name__ != "__main__":
+    config = open_config()
+    check_sections(config)
+    log = create_logger(config)
+    cfg = validate(config, log)
+    templater = Templater(log)
+    notify = load_notifier(cfg, log)

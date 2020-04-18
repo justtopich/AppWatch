@@ -1,14 +1,12 @@
 ####################################
 #
 # AppWatch
-# Connector to Discord service v1.1
+# Connector to Discord service v1.2
 #
 ####################################
 
-import traceback
-import requests
-from conf import configparser, log
-
+from AppWatch import requests, configparser
+from conf import log
 
 class Notify:
     def __init__(self, name: str):
@@ -38,11 +36,9 @@ class Notify:
             log.info(f"Connected to Discord webhook: {self.cfg['name']}")
 
         except ConnectionError:
-            e = "Bad answer from Discord. Check WEBHOOK URL"
+            raise Exception("Bad answer from Discord. Check WEBHOOK URL")
         except KeyError:
-            e = "WEBHOOK doesn't return token"
-        except Exception as e:
-            print(traceback.format_exc())
+            raise Exception("WEBHOOK doesn't return token")
 
         if 'token' not in self.cfg:
             e = f"Fail with discord connection: {e}"

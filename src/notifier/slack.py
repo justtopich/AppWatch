@@ -1,12 +1,11 @@
 ####################################
 #
 # AppWatch
-# Connector to Slack service
+# Connector to Slack service v1.1
 #
 ####################################
 
-from json import dumps
-import requests
+from AppWatch import requests, json
 from conf import configparser, log
 
 
@@ -32,7 +31,7 @@ class Notify:
 
     def send_notify(self, app:str, event:str, body:str) -> bool:
         try:
-            data = dumps({"text": body})
+            data = json.dumps({"text": body})
             headers = {"Content-type" : "application/json", 'Content-Length': len(body)}
 
             res = requests.post(self.cfg['url'], data, headers, timeout=10, proxies=self.cfg['proxy'])

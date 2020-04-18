@@ -12,6 +12,12 @@
 
 
 
+### [build20200418]
+
+- start point: all libraries are available from main module AppWatch
+- Notifiers now can use main module libraries
+- Dynamically importing notifiers. Notifiers must be as python files
+
 ### [build20200417]
 
 - Несколько заданий могут ссылаться на одно задание по разбору логов.

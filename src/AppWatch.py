@@ -1,32 +1,14 @@
-﻿from time import sleep
-import os, sys
-import socket
-import servicemanager
-import traceback
+﻿from __init__ import *
 
-import win32event
-import win32service
-import win32serviceutil
-
-from __init__ import __version__
-from conf import get_svc_params, dataDir, homeDir
-
-
-# Windows запускает модули exe из папки пользователя
-# Папка должна определяться только исполняемым файлом
-keys = os.path.split(os.path.abspath(os.path.join(os.curdir, __file__)))
-# homeDir = sys.argv[0][:sys.argv[0].replace('\\', '/').rfind('/')+1]
-appName = keys[1][:keys[1].find('.')].lower()
-svcParams = get_svc_params()
-del keys
 
 devMode = False
 # devMode = True
 # sys.argv.append('run')
 
-
 def svc_init():
     class AppServerSvc(win32serviceutil.ServiceFramework):
+        from conf import get_svc_params
+        svcParams = get_svc_params()
         _svc_name_ = svcParams[0]
         _svc_display_name_ = svcParams[1]
         _svc_description_ = svcParams[2]
@@ -68,12 +50,11 @@ if __name__ == "__main__":
             servicemanager.StartServiceCtrlDispatcher()
         else:
             if 'install' in sys.argv or 'remove' in sys.argv or 'update' in sys.argv:
-                from conf import homeDir, config
+                # from conf import homeDir, config
                 AppServerSvc = svc_init()
                 win32serviceutil.HandleCommandLine(AppServerSvc)
 
             elif 'doc' in sys.argv:
-                from shutil import copy2
                 print('Export documentation to ./docs')
 
                 try:
@@ -82,7 +63,7 @@ if __name__ == "__main__":
                     pass
 
                 for i in os.listdir(f'{dataDir}docs'):
-                    copy2(f'{dataDir}docs/{i}', f'{homeDir}docs/{i}')
+                    shutil.copy2(f'{dataDir}docs/{i}', f'{homeDir}docs/{i}')
 
             elif 'help' in sys.argv:
                 raise Exception('Show help')

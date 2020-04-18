@@ -41,8 +41,10 @@ def comile():
     try:
         with open(f'src/__init__.py', 'r') as file:
             for line in file.readlines():
-                if "__version__" in line:
-                    lines1.append('__version__ = "'+curdate.replace(', ','.')+build[1]+'"')
+                if line.startswith("__version__"):
+                    lines1.append('__version__ = "'+curdate.replace(', ','.')+build[1]+'"\n')
+                else:
+                    lines1.append(line)
     except Exception as e:
         input("can't read __init__.py: %s" % e)
         return

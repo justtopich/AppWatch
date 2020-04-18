@@ -1,7 +1,11 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 block_cipher = None
-datas = [('README.md', 'docs'), ('CHANGES.md', 'docs'), ('src/notifier/chat_ava.ico', 'notifier')]
+datas = [
+    ('docs/README.md', 'docs'),
+    ('docs/CHANGES.md', 'docs'),
+    ('docs/Connectors.md', 'docs'),
+    ('src/notifier/chat_ava.ico', 'notifier')]
 
 
 a = Analysis(['src\\AppWatch.py'],

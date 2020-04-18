@@ -5,12 +5,13 @@
 #
 ####################################
 
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-import smtplib
-import re
-
-from conf import configparser, log, templater
+from AppWatch import (
+    configparser,
+    MIMEMultipart,
+    MIMEText,
+    smtplib,
+    re)
+from conf import log, templater
 
 
 class Notify:
@@ -29,7 +30,6 @@ class Notify:
 
     def load_config(self, config: configparser, proxy:dict = None) -> dict:
         self.cfg['proxy'] = proxy
-
         try:
             self.cfg["sendTo"] = config.get(self.name, "sendTo")
             self.cfg["server"] = config.get(self.name, "server")
@@ -76,8 +76,8 @@ class Notify:
 
             log.debug(f"Отправка письма")
             s.sendmail(self.cfg["fromHeader"], self.cfg["sendTo"], msg.as_string())
-            log.info(f"Письмо с отчётом {app} отправлено.")
 
+            log.info(f"Письмо с отчётом {app} отправлено.")
             return True
         except Exception as e:
             if e.errno == 11004:

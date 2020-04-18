@@ -1,29 +1,21 @@
-import datetime as dtime
-from time import sleep
-from threading import Thread
-from subprocess import Popen, PIPE, DEVNULL
-import signal, shutil, os, sys
-import traceback
-# import six
+from AppWatch import (
+    os, sys,
+    dtime,
+    sleep,
+    shutil,
+    signal,
+    Thread,
+    Popen, PIPE, DEVNULL,
+    traceback,
+    requests,
+    notification,
+    __version__,
+    homeDir, dataDir)
+from conf import cfg, log, notify, templater
 
-import requests
-# from win10toast import ToastNotifier
-from plyer import notification
-import pystray
-
-from __init__ import __version__
-from conf import cfg, log, notify, templater, homeDir, dataDir
-
-
-localName = cfg['notify']['localName']
-localIp = cfg['notify']['localIp']
-intervalCheckMin = cfg['tasks']['intervalCheckMin']
-sendedNotify = {}
-# toaster = ToastNotifier()
 
 def new_toast(title: str, msg: str):
     try:
-        # toaster.show_toast("AppWatch", msg=msg, duration=20, threaded=False, icon_path=None)
         notification.notify(
             title=title,
             message=msg,
@@ -42,7 +34,6 @@ def shutdown_me(signum, frame):
 def send_notify(taskName, event, body):
     try:
         # decorator?
-        a = sendedNotify
         now = dtime.datetime.now()
         if taskName not in sendedNotify: sendedNotify[taskName] = {}
         if event not in sendedNotify[taskName]:
@@ -299,8 +290,12 @@ def disk_inspector():
 #     icon = pystray.Icon("name", image, "title")
 #     icon.run()
 
-if __name__ != "__main__":
+if __name__ != '__main__':
     resendTime = dtime.timedelta(minutes=cfg['notify']['resendTime'])
+    localName = cfg['notify']['localName']
+    localIp = cfg['notify']['localIp']
+    intervalCheckMin = cfg['tasks']['intervalCheckMin']
+    sendedNotify = {}
 
     # ht = Thread(target=tray_icon, name='tray_icon')
     # ht.start()
