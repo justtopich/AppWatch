@@ -44,3 +44,4 @@ class Notify:
         except Exception as e:
             log.error("Не могу отправить отчёт в Slack  %s" % e)
             return False
+

@@ -11,14 +11,13 @@ from threading import Thread
 from subprocess import Popen, PIPE, DEVNULL
 import configparser, logging
 from logging.handlers import RotatingFileHandler
-
 # need for email connector
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import smtplib
 import re
 
-
+import psutil
 import win32event
 import win32service
 import win32serviceutil
@@ -27,7 +26,8 @@ import win32serviceutil
 import requests
 from plyer import notification
 
-__version__ = "2020.04.18.397"
+
+__version__ = "2020.04.27.406"
 # Windows запускает модули exe из папки пользователя
 # Папка должна определяться только исполняемым файлом
 keys = os.path.split(os.path.abspath(os.path.join(os.curdir, __file__)))
@@ -45,6 +45,6 @@ __all__ = [
     'logging', 'RotatingFileHandler', 'MIMEText', 'MIMEMultipart', 'smtplib', 're',
 
     'win32event', 'win32service', 'win32serviceutil', 'requests', 'notification',
+    'psutil',
 
-    '__version__', 'homeDir', 'dataDir', 'appName'
-]
+    '__version__', 'homeDir', 'dataDir', 'appName']

@@ -12,6 +12,17 @@
 
 
 
+### [build20200427]
+
+- disk_inspector: log doesn't show *diskUsage*
+- fix starting service whith space in name
+- Не видел процесс если его имя длинее 25 символов
+- Идентифицирует процесс не только по имени, но и по директории. AppWatch не мог опередилть кому принадлежит процесс, если они имели одинаковые имена и убивал один из них
+- Change methods: killing process and starting services
+- not showing windows notifications longer then 255 symbols
+
+
+
 ### [build20200418]
 
 - start point: all libraries are available from main module AppWatch
@@ -20,13 +31,13 @@
 
 ### [build20200417]
 
-- Несколько заданий могут ссылаться на одно задание по разбору логов.
+- Несколько заданий могут ссылаться на одно задание по разбору логов
 - add parameter *timeForResponse*
 - Templater have new method: *get_tmpl*
 
 ### [build20200416]
 
-- add console key ***doc***. Now you can get documentation by console.
+- add console key ***doc***. Now you can get documentation by console
 - fix running if no one task is set
 - fix not changing *diskFree* in templates
 - remove license inspector.  Add log inspector
@@ -48,8 +59,8 @@
 ###  [build20200406]
 
 * Тексты оповещений теперь можно редактировать через шаблоны.
-* Коннекторы к сервисам оповещения вынесены в отдельные модули **notifier**. Теперь можно можно написать свой коннектор и указать его для оповещения. Инструкция прилагается.
-* Добавлен коннектор к Discord.
+* Коннекторы к сервисам оповещения вынесены в отдельные модули **notifier**. Теперь можно можно написать свой коннектор и указать его для оповещения. Инструкция прилагается
+* Добавлен коннектор к Discord
 
 
 ###  [build20190808]

@@ -10,7 +10,7 @@ from conf import log
 
 class Notify:
     def __init__(self, name: str):
-        log.info("Discord connector v1.1")
+        log.info("Discord connector v1.2")
         self.name = name
         self.cfg = {}
         self.defaultCfg = {"url": "YOUR_WEBHOOK_URL_HERE"}

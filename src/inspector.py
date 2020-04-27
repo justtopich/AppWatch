@@ -5,9 +5,11 @@ from AppWatch import (
     shutil,
     signal,
     Thread,
-    Popen, PIPE, DEVNULL,
+    # Popen, PIPE, DEVNULL,
+    win32serviceutil,
     traceback,
     requests,
+    psutil,
     notification,
     __version__,
     homeDir, dataDir)
@@ -15,6 +17,9 @@ from conf import cfg, log, notify, templater
 
 
 def new_toast(title: str, msg: str):
+    if len(msg) > 255:
+        msg = msg[:256]
+
     try:
         notification.notify(
             title=title,
@@ -53,28 +58,37 @@ def send_notify(taskName, event, body):
         del sendedNotify[taskName][event]
 
 def process_inspector():
-    def is_alive(exe):
-        # можно использовать | find
-        conv = Popen(f'taskList /svc /fi "IMAGENAME eq {exe}" /nh', shell=True, encoding='cp866',
-                     stdout=PIPE, stderr=PIPE, stdin=DEVNULL)
-        stdout = str(conv.communicate())
-        result = stdout.split()[0].split("\\n")[-1]
-        return result.lower() == exe
+    def get_pid(exe: str, path: str) -> int:
+        for p in psutil.process_iter(["name", "exe"]):
+            if exe == p.name().lower() and \
+                    path[:-1].lower() == os.path.dirname(os.path.abspath(p.info['exe'])).lower():
+                return p.pid
 
-    def restart(job, isDead=False):
+    def restart(job: dict, exePid: int=None, killRecursive: bool=False) -> str:
         data = ""
         status = 0
         failList[app]['attemp'] += 1
-        if not isDead:
+        if exePid:
             try:
-                Popen(f'TASKKILL /f /im {exe}', shell=True, stdout=PIPE, stderr=PIPE)
-                n = 0
-                while is_alive(exe):
-                    sleep(1)
-                    n += 1
-                    if n > 100: raise Exception(f"Не удалось убить процесс {app}: {exe}")
+                # Popen(f'TASKKILL /f /im {exe}', shell=True, stdout=PIPE, stderr=PIPE)
+                assert exePid != os.getpid(), "won't kill myself"
+                parent = psutil.Process(exePid)
+                children = parent.children(killRecursive)
+                children.append(parent)
+
+                # TODO try soft kill before hard
+                for p in children:
+                    try:
+                        # p.send_signal(signal.SIGTERM)
+                        p.kill()
+                    except psutil.NoSuchProcess:
+                        pass
+
+                _, alive = psutil.wait_procs(children, timeout=60)
+                if alive != []:
+                    raise Exception(f"Failing with killing process {exe} (PID {exePid})")
             except Exception as e:
-                data = f'Не удалось перезапустить процесс: {e}\n'
+                data = f'Failing with restarting process {exe}: {e}\n'
                 log.error(data)
                 status = 2
 
@@ -99,36 +113,37 @@ def process_inspector():
             else:
                 log.info(f"Начат запуск службы {job['service']}")
                 try:
-                    # hSCManager = win32service.OpenSCManager(None, None, win32service.SC_MANAGER_CONNECT)
-                    # handle = win32service.OpenService(hSCManager, jobListTmp['service'], win32service.SERVICE_ALL_ACCESS)
-                    # win32service.StartService(handle, None)
-                    # win32service.CloseServiceHandle(handle)
-                    p = Popen(f"net start {job['service']}", shell=True, encoding='cp866',
-                              stdout=PIPE, stderr=PIPE, stdin=DEVNULL)
-                    stdout, stderr = p.communicate()
-                    if stdout:
-                        for line in stdout.split('\n'):
-                            line.replace('\n\n', '')
-                            if line != '':
-                                log.info(line)
-                    if stderr:
-                        for line in stderr.split('\n'):
-                            line.replace('\n\n', '')
-                            if line != '':
-                                log.error(line)
+                    # p = Popen(f'net start "{job["service"]}"', shell=True, encoding='cp866',
+                    #           stdout=PIPE, stderr=PIPE, stdin=DEVNULL)
+                    # stdout, stderr = p.communicate()
+                    # if stdout:
+                    #     for line in stdout.split('\n'):
+                    #         line.replace('\n\n', '')
+                    #         if line != '':
+                    #             log.info(line)
+                    # if stderr:
+                    #     for line in stderr.split('\n'):
+                    #         line.replace('\n\n', '')
+                    #         if line != '':
+                    #             log.error(line)
+
+                    win32serviceutil.StartService(job['service'])
+                    # running = win32serviceutil.QueryServiceStatus(job['service'])[1]
+                    # if not running:
+                    #     a = 0
 
                 except Exception as e:
-                    log.error(str(e))
                     e = traceback.format_exc()
+                    log.error(str(e))
                     status = 3
                     data = f"Не удалось перезапусть службу: {job['service']} ({app}): {e}\n"
                     log.error(data)
 
             # проверка что он снова не упал
-            #TODO отсчёт времени падения после старта
+            # TODO отсчёт времени падения после старта
             if status == 0:
                 sleep(restartTime)
-                if is_alive(exe):
+                if get_pid(exe, path):
                     data += 'Перезапуск приложения выполнено успешно.\n'
                     failList[app]['isAlive'] = False
                     failList[app]['attemp'] -= 1
@@ -153,6 +168,7 @@ def process_inspector():
                 app = job['task']
                 url = job['url']
                 exe = job['exe'].lower()
+                path = job['path']
                 doRestart = job['doRestart']
                 alwaysWork = job['alwaysWork']
                 restartTime = job['restartTime']
@@ -161,8 +177,8 @@ def process_inspector():
                 body = ''
 
                 log.info(f'Check app {app}')
-                isAlive = is_alive(exe)
-                if isAlive:
+                exePid = get_pid(exe, path)
+                if exePid:
                     log.debug(f"Found {app}. Check http status")
                     try:
                         res = requests.get(url, timeout=respTime)
@@ -176,7 +192,7 @@ def process_inspector():
                         else:
                             failList[app]['isAlive'] = False
                             data = templater.tmpl_fill(selfName, 'alive')
-                    except Exception as e:
+                    except Exception:
                         status = 1
                         data = f"{app} не отвечает или вернул не верный статус. Предпринята попытка перезапуска\n"
                         new_toast(f'Презапуск {app}', data)
@@ -186,17 +202,17 @@ def process_inspector():
                         failList[app]['isAlive'] = True
 
                     if status != 0 and doRestart:
-                        data += restart(job)
+                        data += restart(job, exePid)
                         body += data
 
                     send_notify(app, "badAnswer", body)
-                elif not isAlive and alwaysWork:
+                elif not exePid and alwaysWork:
                     body = templater.tmpl_fill(selfName, 'notFound').replace("{{app}}", app, -1)
                     data = f"Отсутсвует обязательныое приложение {app}. Предпринята попытка запуска\n"
                     log.warning(data)
                     new_toast(f'Запуск {app}', data)
 
-                    data += restart(job, isDead=True)
+                    data += restart(job, exePid)
                     body += data
                     send_notify(app, 'notFound', body)
 
@@ -262,21 +278,21 @@ def disk_inspector():
             try:
                 diskFree = round(shutil.disk_usage(diskUsage).free / 1073741824, 2)
                 if diskFree < critFree:
-                    log.error(f"Критически мало места! Осталось всего: {diskFree}")
+                    log.error(f"Критически мало места на диске {diskUsage}! Осталось всего: {diskFree}")
                     event = 'critFree'
                     body = fill_tmpl(event)
 
                     new_toast(diskUsage, f"Критически мало места! Осталось всего: {diskFree}")
                     send_notify(name, event, body)
                 elif diskFree < diskWarn:
-                    log.warning(f"Заканчивается место. Свободно на диске: {diskFree}GB")
+                    log.warning(f"Заканчивается место. Свободно на диске {diskUsage}: {diskFree}GB")
                     event = 'diskWarn'
                     body = fill_tmpl(event)
 
                     new_toast(diskUsage, f"Заканчивается место. Свободно на диске: {diskFree}GB")
                     send_notify(name, event, body)
                 elif diskFree > diskWarn:
-                    log.info(f"Свободно места {diskFree} GB")
+                    log.info(f"disk {diskUsage}: {diskFree}GB free")
 
             except Exception as e:
                 log.critical(f'disk_inspector: {traceback.format_exc()}')

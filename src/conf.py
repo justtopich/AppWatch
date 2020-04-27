@@ -77,6 +77,7 @@ default = {
         "//not required. Default is 10": "",
         "url": "http://127.0.1.1:7252/uptime",
         "exe": "MyServer.exe",
+        "path": "C:\Apps\MmyHttpServer",
         "whatStart": "service",
         "service": "HttpServer-srv"
     },
@@ -209,6 +210,8 @@ def create_logger(config: configparser.RawConfigParser) -> logging.Logger:
     consoleHandler.setFormatter(log_formatter)
     cons_log.addHandler(consoleHandler)
 
+    log.info(f"")
+    log.info(f"Starting AppWatch")
     return log
 
 # check general settings
@@ -320,17 +323,20 @@ def validate(config: configparser.RawConfigParser, log: logging.Logger) -> dict:
             jobListTmp['restartTime'] = config.getint(task, "timeForRestartingSec")
             jobListTmp['whatStart'] = whatStart = config.get(task, "whatStart")
 
+            jobListTmp['path'] = config.get(task, "path").replace('/', '\\', -1)
+            if not jobListTmp['path'].endswith('\\'):
+                jobListTmp['path'] = jobListTmp['path'] + '\\'
+
             if config.has_option(task, 'timeForResponse'):
                 jobListTmp['respTime'] = config.getint(task, "timeForResponse")
             else:
                 jobListTmp['respTime'] = 10
 
             if whatStart == 'exe':
-                jobListTmp['exeKey'] = config.get(task, "exeKey")
-                jobListTmp['path'] = config.get(task, "path").replace('\\', '/', -1)
-                if not jobListTmp['path'].endswith('/'):
-                    jobListTmp['path'] = jobListTmp['path'] + '/'
-
+                if config.has_option(task, 'exeKey'):
+                    jobListTmp['exeKey'] = config.get(task, "exeKey")
+                else:
+                    jobListTmp['exeKey'] = ''
             elif whatStart == 'script':
                 jobListTmp['script'] = config.get(task, "script").replace('\\', '/', -1)
             elif whatStart == 'service':
@@ -340,10 +346,6 @@ def validate(config: configparser.RawConfigParser, log: logging.Logger) -> dict:
 
             if config.has_option(task, 'logInspector'):
                 jobListTmp['logInspector'] = config.get(task, 'logInspector')
-                jobListTmp['path'] = config.get(task, "path").replace('\\', '/', -1)
-                if not jobListTmp['path'].endswith('/'):
-                    jobListTmp['path'] = jobListTmp['path'] + '/'
-
                 log_task(jobListTmp['logInspector'], task)
 
             cfg["tasks"]["jobList"][task] = jobListTmp
