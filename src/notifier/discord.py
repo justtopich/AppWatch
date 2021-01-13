@@ -41,7 +41,7 @@ class Notify:
             raise Exception("WEBHOOK doesn't return token")
 
         if 'token' not in self.cfg:
-            e = f"Fail with discord connection: {e}"
+            e = f"Discord WEBHOOK didn't return token"
             log.error(e)
             raise Exception(e)
 
@@ -53,10 +53,10 @@ class Notify:
             res = requests.post(self.cfg['url'], json=data, timeout=10, proxies=self.cfg['proxy'])
 
             if res.ok:
-                log.info(f"Отчёт отправлен.")
+                log.info(f"Report sent")
                 return True
             else:
                 raise Exception("Server return status %s" % res.status_code)
         except Exception as e:
-            log.error("Не могу отправить отчёт в Discord  %s" % e)
+            log.error("Fail sent report by Discord  %s" % e)
             return False

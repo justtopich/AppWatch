@@ -38,10 +38,10 @@ class Notify:
             if res.status_code != 200:
                 raise Exception("Server return status %s" % res.status_code)
 
-            log.info(f"Отчёт отправлен.")
+            log.info(f"Report sent")
             return True
 
         except Exception as e:
-            log.error("Не могу отправить отчёт в Slack  %s" % e)
+            log.error("Fail sent report by Slack  %s" % e)
             return False
 

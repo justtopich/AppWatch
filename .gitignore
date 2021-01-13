@@ -1,4 +1,6 @@
 bin/
+bin-linux-x64/
+bin-win-x64/
 src/*.log
 src/AppWatch.cfg
 src/error.txt

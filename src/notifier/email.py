@@ -23,7 +23,7 @@ class Notify:
             "server": "smtp.pantsumail.ru",
             "port": "587",
             "useSSL": "False",
-            "// Try 587 if 465 not work": "",
+            "; Try 587 if 465 not work": "",
             "user": "username",
             "password": "11111",
             "fromHeader": "Pantsu Alarm <bot@pantsumail.ru>"}
@@ -38,16 +38,16 @@ class Notify:
             self.cfg["user"] = config.get(self.name, "user")
             self.cfg["password"] = config.get(self.name, "password")
             self.cfg["fromHeader"] = config.get(self.name, "fromHeader")
-            log.info("Адрес почты получателя " + self.cfg["sendTo"])
+            log.info(f'Recipient mail address {self.cfg["sendTo"]}')
         except Exception as e:
             e = f"Bad {self.name} configuration: {e}"
             log.error(e)
             raise Exception(e)
 
         if re.findall(r'\w+@\w+.\w+', self.cfg["sendTo"]):
-            log.debug(f'Адрес почты получателя {self.cfg["sendTo"]}')
+            log.debug(f'Recipient mail address: {self.cfg["sendTo"]}')
         else:
-            log.error("Неправильный адрес почты sendTo.")
+            log.error("Wrong email sendTo.")
             raise SystemExit(1)
 
         return self.cfg
@@ -63,7 +63,7 @@ class Notify:
         except Exception as e:
             log.error(str(e))
 
-        log.debug(f"Соединение с почтовым сервером {self.cfg['server']}")
+        log.debug(f"Connecting to email server {self.cfg['server']}")
         try:
             if self.cfg["useSSL"]:
                 s = smtplib.SMTP_SSL(host=self.cfg['server'], port=self.cfg['port'])
@@ -74,14 +74,14 @@ class Notify:
                 s = smtplib.SMTP(self.cfg['server'], self.cfg['port'])
                 s.ehlo().starttls().ehlo().login(self.cfg['user'], self.cfg['password']) # Рукопожатие, обязательно
 
-            log.debug(f"Отправка письма")
+            log.debug(f"Sending report")
             s.sendmail(self.cfg["fromHeader"], self.cfg["sendTo"], msg.as_string())
 
-            log.info(f"Письмо с отчётом {app} отправлено.")
+            log.info(f"Report of an event {app} sent")
             return True
         except Exception as e:
             if e.errno == 11004:
-                log.error("Не могу соединиться с почтовым сервером.")
+                log.error("Fail to connect to email server")
             else:
-                log.error("Ошибка при отправлении письма: %s" % e)
+                log.error("Fail to send report: %s" % e)
             return False

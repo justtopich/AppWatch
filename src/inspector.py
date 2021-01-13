@@ -1,22 +1,27 @@
 from AppWatch import (
+    sout,
+    platform,
     os, sys,
     dtime,
     sleep,
     shutil,
     signal,
     Thread,
-    # Popen, PIPE, DEVNULL,
-    win32serviceutil,
     traceback,
     requests,
     psutil,
     notification,
     __version__,
-    homeDir, dataDir)
+    dataDir)
 from conf import cfg, log, notify, templater
+
+if platform == 'nt':
+    import win32serviceutil
 
 
 def new_toast(title: str, msg: str):
+    if platform != "nt":
+        return
     if len(msg) > 255:
         msg = msg[:256]
 
@@ -31,25 +36,33 @@ def new_toast(title: str, msg: str):
     except Exception as e:
         log.error(f"Fail to show windows notification: {e}")
 
-# ловит ctrl-C. Останавливает модули в нужном порядке
-def shutdown_me(signum, frame):
-    log.warning('Получена команда завершения работы')
-    os._exit(1)
+
+def shutdown_me(signum, frame, appServerSvc=None):
+    # ловит ctrl-C. Останавливает модули в нужном порядке
+    log.warning('Stopping...')
+
+    if appServerSvc:
+        appServerSvc.daemon.exit()
+
+    log.info("Shutdown is successful")
+    os._exit(0)
+
 
 def send_notify(taskName, event, body):
     try:
         # decorator?
         now = dtime.datetime.now()
-        if taskName not in sendedNotify: sendedNotify[taskName] = {}
+        if taskName not in sendedNotify:
+            sendedNotify[taskName] = {}
         if event not in sendedNotify[taskName]:
             sendedNotify[taskName][event] = now
         else:
             delta = now - sendedNotify[taskName][event]
             if delta < resendTime:
-                log.info(f"Отчёт по событию {event} уже был отправлен.")
+                log.info(f"Report of an event {event} is already sent.")
                 return
 
-        log.debug(f"Создание отчёта по событию {taskName}: {event}")
+        log.debug(f"Creating report of an event {taskName}: {event}")
         if not notify.send_notify(taskName, event, body):
             del sendedNotify[taskName][event]
 
@@ -57,12 +70,30 @@ def send_notify(taskName, event, body):
         log.error(f"Fail send notify: {e}")
         del sendedNotify[taskName][event]
 
+
 def process_inspector():
-    def get_pid(exe: str, path: str) -> int:
-        for p in psutil.process_iter(["name", "exe"]):
-            if exe == p.name().lower() and \
-                    path[:-1].lower() == os.path.dirname(os.path.abspath(p.info['exe'])).lower():
-                return p.pid
+    def get_pid(exe: str, exePath: str, workDir: str=None) -> int:
+        # if give workDir, will check only it
+
+        for p in psutil.process_iter(["name", 'exe', 'cwd']):
+            if 'calc1' in p.info['name']:
+                sout(f"{p.pid} | {p.info['name']} | {p.info['cwd']} | {p.info['exe']}", 'violet' )
+
+            if exe == p.info['name'].lower():
+                if workDir:
+                    if not p.info['cwd'].endswith('/'):
+                        p.info['cwd'] = f"{p.info['cwd']}/"
+
+                    if workDir.lower() == p.info['cwd'].replace('\\', '/', -1).lower():
+                        return p.pid
+                else:
+                    if platform == 'nt':
+                        exePath = f"{exePath}{exe}"
+                    else:
+                        exePath = exePath[:-1]
+
+                    if exePath.lower() == p.info['exe'].replace('\\', '/', -1).lower():
+                        return p.pid
 
     def restart(job: dict, exePid: int=None, killRecursive: bool=False) -> str:
         data = ""
@@ -70,7 +101,6 @@ def process_inspector():
         failList[app]['attemp'] += 1
         if exePid:
             try:
-                # Popen(f'TASKKILL /f /im {exe}', shell=True, stdout=PIPE, stderr=PIPE)
                 assert exePid != os.getpid(), "won't kill myself"
                 parent = psutil.Process(exePid)
                 children = parent.children(killRecursive)
@@ -85,90 +115,80 @@ def process_inspector():
                         pass
 
                 _, alive = psutil.wait_procs(children, timeout=60)
-                if alive != []:
-                    raise Exception(f"Failing with killing process {exe} (PID {exePid})")
+                if alive:
+                    raise Exception(f"Fail to kill process {exe} (PID {exePid})")
             except Exception as e:
-                data = f'Failing with restarting process {exe}: {e}\n'
+                data = f'Fail to restart process {exe}: {e}\n'
                 log.error(data)
                 status = 2
 
         if status == 0:
-            log.debug(f"Запуск приложения {app}")
+            log.debug(f"Launch application {app}")
             whatStart = job['whatStart']
-            if whatStart == 'script':
-                 target = job['script']
+
+            if whatStart == 'command':
+                target = job['command']
             elif whatStart == 'exe':
-                target = f"{job['path']}{exe} {job['exeKey']}"
+                target = f"{job['exePath']}{exe} {job['exeKey']}"
             else:
-                target = ''
+                target = None
 
-            if target != '':
-                log.info(f"Начат запуск {app}")
+            if target:
+                log.info(f"Starting {app}")
                 try:
-                    os.system(f"start cmd /c {target}")
+                    if platform == 'nt':
+                        os.system(f"start cmd /c {target}")
+                    else:
+                        os.system(f"command {target} &")
                 except Exception as e:
-                    data = f"Не удалось перезапусть процесс: {exe} ({app}): {e}\n"
+                    data = f"Fail to restart application: {exe} ({app}): {e}\n"
                     status = 3
-                    log.error(data)
             else:
-                log.info(f"Начат запуск службы {job['service']}")
+                log.info(f"Starting service {job['service']}")
                 try:
-                    # p = Popen(f'net start "{job["service"]}"', shell=True, encoding='cp866',
-                    #           stdout=PIPE, stderr=PIPE, stdin=DEVNULL)
-                    # stdout, stderr = p.communicate()
-                    # if stdout:
-                    #     for line in stdout.split('\n'):
-                    #         line.replace('\n\n', '')
-                    #         if line != '':
-                    #             log.info(line)
-                    # if stderr:
-                    #     for line in stderr.split('\n'):
-                    #         line.replace('\n\n', '')
-                    #         if line != '':
-                    #             log.error(line)
-
-                    win32serviceutil.StartService(job['service'])
-                    # running = win32serviceutil.QueryServiceStatus(job['service'])[1]
-                    # if not running:
-                    #     a = 0
+                    if platform == 'nt':
+                        win32serviceutil.StartService(job['service'])
+                    else:
+                        os.system(f"systemctl start {job['service']}")
 
                 except Exception as e:
                     e = traceback.format_exc()
                     log.error(str(e))
                     status = 3
-                    data = f"Не удалось перезапусть службу: {job['service']} ({app}): {e}\n"
-                    log.error(data)
+                    data = f"Fail to start service: {job['service']} ({app}): {e}\n"
 
             # проверка что он снова не упал
             # TODO отсчёт времени падения после старта
             if status == 0:
                 sleep(restartTime)
-                if get_pid(exe, path):
-                    data += 'Перезапуск приложения выполнено успешно.\n'
+                if get_pid(exe, checkPath, workDir):
+                    data += 'Successfully restarted application'
                     failList[app]['isAlive'] = False
                     failList[app]['attemp'] -= 1
                     log.info(data)
                 else:
-                    data = f"Не удалось перезапусть {app}: он вновь падает\n"
+                    data += f'Fail to start {app}'
                     log.error(data)
+            else:
+                log.error(data)
 
         new_toast(app, data)
         return data
 
-    log.debug("process_inspector started")
+    sleep(3)
     selfName = "process_inspector"
     failList = {}
     for job in jobList:
-        failList[job] = {'isAlive' : False, "attemp" : 0}
+        failList[job] = {'isAlive': False, "attemp": 0}
 
     while True:
         try:
-            #TODO или всё забрать или убрать лишние
             for job in jobList.values():
                 app = job['task']
-                url = job['url']
                 exe = job['exe'].lower()
-                path = job['path']
+                checkPath = job['checkPath']
+                exePath = job['exePath']
+                workDir = job['workDir']
                 doRestart = job['doRestart']
                 alwaysWork = job['alwaysWork']
                 restartTime = job['restartTime']
@@ -177,11 +197,14 @@ def process_inspector():
                 body = ''
 
                 log.info(f'Check app {app}')
-                exePid = get_pid(exe, path)
-                if exePid:
+                exePid = get_pid(exe, checkPath, workDir)
+
+                if exePid and not job['checkUrl']:
+                    log.debug(f"{app} is fine.")
+                elif exePid and job['checkUrl']:
                     log.debug(f"Found {app}. Check http status")
                     try:
-                        res = requests.get(url, timeout=respTime)
+                        res = requests.get(job['url'], timeout=respTime)
                         if res.status_code != 200:
                             raise Exception(f"Server return status {res.status_code}")
 
@@ -194,8 +217,8 @@ def process_inspector():
                             data = templater.tmpl_fill(selfName, 'alive')
                     except Exception:
                         status = 1
-                        data = f"{app} не отвечает или вернул не верный статус. Предпринята попытка перезапуска\n"
-                        new_toast(f'Презапуск {app}', data)
+                        data = f"{app} didn't respond or return wrong answer. Trying to restart application\n"
+                        new_toast(f'Restarting {app}', data)
                         log.warning(data)
 
                         body = templater.tmpl_fill(selfName, "badAnswer").replace("{{app}}", app, -1)
@@ -208,9 +231,9 @@ def process_inspector():
                     send_notify(app, "badAnswer", body)
                 elif not exePid and alwaysWork:
                     body = templater.tmpl_fill(selfName, 'notFound').replace("{{app}}", app, -1)
-                    data = f"Отсутсвует обязательныое приложение {app}. Предпринята попытка запуска\n"
+                    data = f"Not found required application {app}. Trying to restart\n"
                     log.warning(data)
-                    new_toast(f'Запуск {app}', data)
+                    new_toast(f'Starting {app}', data)
 
                     data += restart(job, exePid)
                     body += data
@@ -221,6 +244,7 @@ def process_inspector():
             e = traceback.format_exc()
             log.critical(str(e))
             break
+
 
 def log_inspector():
     log.debug("log_inspector started")
@@ -233,29 +257,31 @@ def log_inspector():
                 templates = task['tmpl']
 
                 try:
-                    #TODO open if file is changed
+                    # TODO open if file is changed
                     with open(logFile, encoding='utf-8') as f:
                         cnt = f.read()
 
-                    for tmpl in templates:
-                        tmpl = templater.get_tmpl(selfName, tmpl)
+                    for tmplName in templates:
+                        tmpl = templater.get_tmpl(selfName, tmplName)
                         if tmpl in cnt:
-                            log.error(f"Ошибка лицензии {taskName}")
+                            ev = f"Found log expression {taskName}: {tmplName}"
+                            log.warning(ev)
                             body = templater.tmpl_fill(selfName, 'error').replace('{{app}}', taskName, -1)
 
-                            new_toast(taskName, 'Ошибка лицензии')
+                            new_toast('log_inspector', ev)
                             send_notify(taskName, 'error', body)
 
                 except FileNotFoundError:
-                    log.error(f"Не найден журнал лицензии {taskName}")
+                    log.error(f"Not found log file {taskName}")
                 except Exception as e:
-                    log.error(f"Ошибка проверки журнала лицензии {taskName}: {e}")
+                    log.error(f"Fail to parse log file {taskName}: {e}")
 
-            sleep(intervalCheckMin*2)
+            sleep(intervalCheckMin * 2)
         except Exception as e:
             e = traceback.format_exc()
             log.critical(str(e))
             break
+
 
 def disk_inspector():
     def fill_tmpl(event: str) -> str:
@@ -264,7 +290,6 @@ def disk_inspector():
         body = body.replace('{{diskFree}}', str(diskFree), -1)
         body = body.replace('{{diskUsage}}', diskUsage, -1)
         return body.replace('{{diskWarn}}', str(diskWarn), -1)
-
 
     log.debug("disk_inspector started")
     selfName = 'disk_inspector'
@@ -278,25 +303,27 @@ def disk_inspector():
             try:
                 diskFree = round(shutil.disk_usage(diskUsage).free / 1073741824, 2)
                 if diskFree < critFree:
-                    log.error(f"Критически мало места на диске {diskUsage}! Осталось всего: {diskFree}")
+                    log.error(f"Free disk space is critically small on {diskUsage}: {diskFree}")
                     event = 'critFree'
                     body = fill_tmpl(event)
 
-                    new_toast(diskUsage, f"Критически мало места! Осталось всего: {diskFree}")
+                    new_toast(diskUsage, f"Free disk space is critically small: {diskFree}")
                     send_notify(name, event, body)
                 elif diskFree < diskWarn:
-                    log.warning(f"Заканчивается место. Свободно на диске {diskUsage}: {diskFree}GB")
+                    log.warning(f"Free disk space is ends {diskUsage}: {diskFree}GB")
                     event = 'diskWarn'
                     body = fill_tmpl(event)
 
-                    new_toast(diskUsage, f"Заканчивается место. Свободно на диске: {diskFree}GB")
+                    new_toast(diskUsage, f"Free disk space is ends: {diskFree}GB")
                     send_notify(name, event, body)
                 elif diskFree > diskWarn:
                     log.info(f"disk {diskUsage}: {diskFree}GB free")
 
+            except FileNotFoundError:
+                log.error(f'disk_inspector: wrong path: {diskUsage}')
             except Exception as e:
                 log.critical(f'disk_inspector: {traceback.format_exc()}')
-                raise SystemExit(1)
+                shutdown_me(9, 9)
 
         # TODO maybe use custom timer
         sleep(intervalCheckMin)
@@ -305,6 +332,7 @@ def disk_inspector():
 #     image = Image.open(f'{dataDir}notifier/chat_ava.ico')
 #     icon = pystray.Icon("name", image, "title")
 #     icon.run()
+
 
 if __name__ != '__main__':
     resendTime = dtime.timedelta(minutes=cfg['notify']['resendTime'])
@@ -329,11 +357,14 @@ if __name__ != '__main__':
         ht1 = Thread(target=process_inspector, name='process_inspector')
         ht1.start()
 
-    log.info("AppWatch started. Version " + __version__)
+    log.info(f"AppWatch started. Version {__version__}_{platform}")
 
     if 'run' in sys.argv:
-        signal.signal(signal.SIGTERM, shutdown_me)
         signal.signal(signal.SIGINT, shutdown_me)
+        signal.signal(signal.SIGTERM, shutdown_me)
+        if platform != 'nt':
+            signal.signal(signal.SIGQUIT, shutdown_me)
+
         input()
         while True:
             input('Use Ctrl+C to stop me\n')

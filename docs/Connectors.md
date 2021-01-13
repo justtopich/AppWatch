@@ -34,7 +34,10 @@ class Notify:
         try:
             msg = templater.tmpl_fill(self.name, 'myTemplate')
             print(msg)
-            requests.get('someURL', proxies=self.cfg['proxy'])
+            requests.post(
+                'someURL',
+                proxies=self.cfg['proxy'],
+                data={'report': msg})
             return True
         except Exception as e:
             log.error(f"Fail to send report: {e}")

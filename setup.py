@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 from setuptools import setup
 
-readme = 'README.md'
+
+readme = 'docs/README.md'
 
 setup(
     name='AppWatch',
@@ -15,6 +16,6 @@ setup(
     long_description=open(readme, encoding='utf-8').read(),
     long_description_content_type="text/markdown",
     python_requires=">=3.6",
-    install_requires=['pywin32>=223', 'requests=>2.21.0'],
+    install_requires=open('requirements.txt', encoding='utf-8').readlines(),
     keywords=['application', 'app', 'watchdog', 'monitor', 'watch', 'control']
 )

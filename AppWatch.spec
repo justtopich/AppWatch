@@ -8,8 +8,8 @@ datas = [
     ('src/notifier/chat_ava.ico', 'notifier')]
 
 
-a = Analysis(['src\\AppWatch.py'],
-             pathex=['./src'],
+a = Analysis(['src/AppWatch.py'],
+             pathex=['src'],
              binaries=[],
              datas=datas,
              hiddenimports=['win32timezone', 'pkg_resources.py2_warn', 'plyer.platforms.win.notification'],
