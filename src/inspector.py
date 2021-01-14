@@ -76,8 +76,8 @@ def process_inspector():
         # if give workDir, will check only it
 
         for p in psutil.process_iter(["name", 'exe', 'cwd']):
-            if 'calc1' in p.info['name']:
-                sout(f"{p.pid} | {p.info['name']} | {p.info['cwd']} | {p.info['exe']}", 'violet' )
+            # if 'calc1' in p.info['name']:
+                # sout(f"{p.pid} | {p.info['name']} | {p.info['cwd']} | {p.info['exe']}", 'violet' )
 
             if exe == p.info['name'].lower():
                 if workDir:
@@ -324,8 +324,6 @@ def disk_inspector():
             except Exception as e:
                 log.critical(f'disk_inspector: {traceback.format_exc()}')
                 shutdown_me(9, 9)
-
-        # TODO maybe use custom timer
         sleep(intervalCheckMin)
 
 # def tray_icon():

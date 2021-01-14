@@ -1,7 +1,6 @@
 ####################################
 #
-# AppWatch
-# Connector to Slack service v1.1
+# AppWatch. Connector to Slack service
 #
 ####################################
 
@@ -9,15 +8,19 @@ from AppWatch import requests, json
 from conf import configparser, log
 
 
+__version__ = '1.1.1'
+
+
 class Notify:
     def __init__(self, name: str):
-        log.info("lucky-slacky v1.1")
+        log.info(f"lucky-slacky v{__version__}")
         self.name = name
         self.cfg = {}
         self.defaultCfg = {"url": "YOUR_WEBHOOK_URL_HERE"}
 
     def load_config(self, config: configparser, proxy:dict = None) -> dict:
         self.cfg['proxy'] = proxy
+        log.info(f"Connecting to {self.name} webhook")
 
         try:
             self.cfg["url"] = config.get(self.name, "url")

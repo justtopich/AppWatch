@@ -560,14 +560,14 @@ def load_notifier(cfg: dict, log: logging.Logger) -> Notify:
 
             cfg["notify"][name] = notify.load_config(config, cfg['notify']['proxy'])
         return notify
-    except ImportError as e:
+    except ImportError:
         log.error(f'Fail import notifier: {name}: {traceback.format_exc()}')
         raise SystemExit(1)
     except AttributeError as e:
         log.error(f'Wrong notifier: {e}')
         raise SystemExit(1)
-    except Exception as e:
-        log.error(f'Fail load notifier: {e}')
+    except Exception:
+        log.error(f'Fail load notifier: {traceback.format_exc()}')
         raise SystemExit(1)
 
 

@@ -192,7 +192,7 @@ AppWatch предоставляет три коннектора: email, slack и
 [taskList]
 intervalCheckMin = 10
 active = 2
-// 1 = diskUsage
+; 1 = diskUsage
 1 = myApp
 2 = MyHttpServer
 ```

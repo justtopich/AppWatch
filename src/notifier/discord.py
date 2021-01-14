@@ -1,22 +1,26 @@
 ####################################
 #
-# AppWatch
-# Connector to Discord service v1.2
+# AppWatch. Connector to Discord service
 #
 ####################################
 
 from AppWatch import requests, configparser
 from conf import log
 
+
+__version__ = '1.2.1'
+
+
 class Notify:
     def __init__(self, name: str):
-        log.info("Discord connector v1.2")
+        log.info(f"Discord connector v{__version__}")
         self.name = name
         self.cfg = {}
         self.defaultCfg = {"url": "YOUR_WEBHOOK_URL_HERE"}
 
-    def load_config(self, config: configparser, proxy:dict = None) -> dict:
+    def load_config(self, config: configparser, proxy: dict = None) -> dict:
         self.cfg['proxy'] = proxy
+        log.info(f"Connecting to {self.name} webhook")
 
         try:
             self.cfg["url"] = config.get(self.name, "url")
