@@ -2,7 +2,17 @@
 
 ------
 
+## [build2021011511]
 
+### Features
+
+* Add parameter `[notify]onlyChanges`
+
+### Improvements
+
+* Rename template variable `{{app}}` -> `{{taskName}}`
+
+  
 
 ## [build202101145]
 

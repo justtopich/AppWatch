@@ -23,7 +23,7 @@ import requests
 from plyer import notification
 
 
-__version__ = "2021.01.14.5"
+__version__ = "2021.01.15.11"
 
 
 def sout(msg, clr='white'):

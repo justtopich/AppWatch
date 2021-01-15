@@ -16,6 +16,8 @@ default = {
         "; email or slack": "",
         "resendTimeoutM": "30",
         "; This Server info": "",
+        "onlyChanges": "false",
+        "; send only if task status is changed": "",
         "localName": "Pantsu Server",
         "localIp": "0.0.0.0",
         "useProxy": "false"
@@ -279,6 +281,7 @@ def verify_config(config: configparser.RawConfigParser, log: logging.Logger) -> 
 
         try:
             cfg["notify"]["resendTime"] = config.getint("notify", "resendTimeoutM")
+            cfg["notify"]["onlyChanges"] = config.getboolean("notify", "onlyChanges")
             cfg["notify"]["type"] = config.get("notify", "type").lower()
             if cfg["notify"]["type"].strip() == '':
                 raise Exception(f'Wrong Notify type: {cfg["notify"]["type"]}')

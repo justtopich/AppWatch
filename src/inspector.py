@@ -48,21 +48,25 @@ def shutdown_me(signum, frame, appServerSvc=None):
     os._exit(0)
 
 
-def send_notify(taskName, event, body):
+def send_notify(taskName: str, event: str, body: str):
     try:
         # decorator?
         now = dtime.datetime.now()
         if taskName not in sendedNotify:
             sendedNotify[taskName] = {}
         if event not in sendedNotify[taskName]:
-            sendedNotify[taskName][event] = now
+            sendedNotify[taskName][event] = {"dtm": now, "body": body}
         else:
-            delta = now - sendedNotify[taskName][event]
+            delta = now - sendedNotify[taskName][event]['dtm']
             if delta < resendTime:
-                log.info(f"Report of an event {event} is already sent.")
+                log.info(f"Reject report of an event {event}: is already sent.")
                 return
 
-        log.debug(f"Creating report of an event {taskName}: {event}")
+            if cfg['notify']['onlyChanges'] and sendedNotify[taskName][event]['body'] == body:
+                log.info(f"Reject report of an event {event}: is not changed from last sent")
+                return
+
+        log.debug(f"New report of an event {taskName}: {event}")
         if not notify.send_notify(taskName, event, body):
             del sendedNotify[taskName][event]
 
@@ -98,7 +102,7 @@ def process_inspector():
     def restart(job: dict, exePid: int=None, killRecursive: bool=False) -> str:
         data = ""
         status = 0
-        failList[app]['attemp'] += 1
+        failList[taskName]['attemp'] += 1
         if exePid:
             try:
                 assert exePid != os.getpid(), "won't kill myself"
@@ -123,7 +127,7 @@ def process_inspector():
                 status = 2
 
         if status == 0:
-            log.debug(f"Launch application {app}")
+            log.debug(f"Launch application {taskName}")
             whatStart = job['whatStart']
 
             if whatStart == 'command':
@@ -134,14 +138,14 @@ def process_inspector():
                 target = None
 
             if target:
-                log.info(f"Starting {app}")
+                log.info(f"Starting {taskName}")
                 try:
                     if platform == 'nt':
                         os.system(f"start cmd /c {target}")
                     else:
                         os.system(f"command {target} &")
                 except Exception as e:
-                    data = f"Fail to restart application: {exe} ({app}): {e}\n"
+                    data = f"Fail to restart application: {exe} ({taskName}): {e}\n"
                     status = 3
             else:
                 log.info(f"Starting service {job['service']}")
@@ -155,7 +159,7 @@ def process_inspector():
                     e = traceback.format_exc()
                     log.error(str(e))
                     status = 3
-                    data = f"Fail to start service: {job['service']} ({app}): {e}\n"
+                    data = f"Fail to start service: {job['service']} ({taskName}): {e}\n"
 
             # проверка что он снова не упал
             # TODO отсчёт времени падения после старта
@@ -163,16 +167,16 @@ def process_inspector():
                 sleep(restartTime)
                 if get_pid(exe, checkPath, workDir):
                     data += 'Successfully restarted application'
-                    failList[app]['isAlive'] = False
-                    failList[app]['attemp'] -= 1
+                    failList[taskName]['isAlive'] = False
+                    failList[taskName]['attemp'] -= 1
                     log.info(data)
                 else:
-                    data += f'Fail to start {app}'
+                    data += f'Fail to start {taskName}'
                     log.error(data)
             else:
                 log.error(data)
 
-        new_toast(app, data)
+        new_toast(taskName, data)
         return data
 
     sleep(3)
@@ -184,7 +188,7 @@ def process_inspector():
     while True:
         try:
             for job in jobList.values():
-                app = job['task']
+                taskName = job['task']
                 exe = job['exe'].lower()
                 checkPath = job['checkPath']
                 exePath = job['exePath']
@@ -196,51 +200,51 @@ def process_inspector():
                 status = 0
                 body = ''
 
-                log.info(f'Check app {app}')
+                log.info(f'Check app {taskName}')
                 exePid = get_pid(exe, checkPath, workDir)
 
                 if exePid and not job['checkUrl']:
-                    log.debug(f"{app} is fine.")
+                    log.debug(f"{taskName} is fine.")
                 elif exePid and job['checkUrl']:
-                    log.debug(f"Found {app}. Check http status")
+                    log.debug(f"Found {taskName}. Check http status")
                     try:
                         res = requests.get(job['url'], timeout=respTime)
                         if res.status_code != 200:
                             raise Exception(f"Server return status {res.status_code}")
 
-                        log.debug(f"{app} is fine.")
+                        log.debug(f"{taskName} is fine.")
 
-                        if not failList[app]['isAlive']:
+                        if not failList[taskName]['isAlive']:
                             continue
                         else:
-                            failList[app]['isAlive'] = False
+                            failList[taskName]['isAlive'] = False
                             data = templater.tmpl_fill(selfName, 'alive')
                     except Exception:
                         status = 1
-                        data = f"{app} didn't respond or return wrong answer. Trying to restart application\n"
-                        new_toast(f'Restarting {app}', data)
+                        data = f"{taskName} didn't respond or return wrong answer. Trying to restart application\n"
+                        new_toast(f'Restarting {taskName}', data)
                         log.warning(data)
 
-                        body = templater.tmpl_fill(selfName, "badAnswer").replace("{{app}}", app, -1)
-                        failList[app]['isAlive'] = True
+                        body = templater.tmpl_fill(selfName, "badAnswer").replace("{{taskName}}", taskName, -1)
+                        failList[taskName]['isAlive'] = True
 
                     if status != 0 and doRestart:
                         data += restart(job, exePid)
                         body += data
 
-                    send_notify(app, "badAnswer", body)
+                    send_notify(taskName, "badAnswer", body)
                 elif not exePid and alwaysWork:
-                    body = templater.tmpl_fill(selfName, 'notFound').replace("{{app}}", app, -1)
-                    data = f"Not found required application {app}. Trying to restart\n"
+                    body = templater.tmpl_fill(selfName, 'notFound').replace("{{taskName}}", taskName, -1)
+                    data = f"Not found required application {taskName}. Trying to restart\n"
                     log.warning(data)
-                    new_toast(f'Starting {app}', data)
+                    new_toast(f'Starting {taskName}', data)
 
                     data += restart(job, exePid)
                     body += data
-                    send_notify(app, 'notFound', body)
+                    send_notify(taskName, 'notFound', body)
 
             sleep(intervalCheckMin)
-        except Exception as e:
+        except Exception:
             e = traceback.format_exc()
             log.critical(str(e))
             break
@@ -266,7 +270,7 @@ def log_inspector():
                         if tmpl in cnt:
                             ev = f"Found log expression {taskName}: {tmplName}"
                             log.warning(ev)
-                            body = templater.tmpl_fill(selfName, 'error').replace('{{app}}', taskName, -1)
+                            body = templater.tmpl_fill(selfName, 'error').replace('{{taskName}}', taskName, -1)
 
                             new_toast('log_inspector', ev)
                             send_notify(taskName, 'error', body)
@@ -277,7 +281,7 @@ def log_inspector():
                     log.error(f"Fail to parse log file {taskName}: {e}")
 
             sleep(intervalCheckMin * 2)
-        except Exception as e:
+        except Exception:
             e = traceback.format_exc()
             log.critical(str(e))
             break
@@ -289,13 +293,14 @@ def disk_inspector():
         body = body.replace('{{critFree}}', str(critFree), -1)
         body = body.replace('{{diskFree}}', str(diskFree), -1)
         body = body.replace('{{diskUsage}}', diskUsage, -1)
+        body = body.replace('{{taskName}}', taskName, -1)
         return body.replace('{{diskWarn}}', str(diskWarn), -1)
 
     log.debug("disk_inspector started")
     selfName = 'disk_inspector'
 
     while True:
-        for name, task in cfg['tasks']['diskTask'].items():
+        for taskName, task in cfg['tasks']['diskTask'].items():
             critFree = task['critFree']
             diskUsage = task['diskUsage']
             diskWarn = task['diskWarn']
@@ -308,14 +313,14 @@ def disk_inspector():
                     body = fill_tmpl(event)
 
                     new_toast(diskUsage, f"Free disk space is critically small: {diskFree}")
-                    send_notify(name, event, body)
+                    send_notify(taskName, event, body)
                 elif diskFree < diskWarn:
                     log.warning(f"Free disk space is ends {diskUsage}: {diskFree}GB")
                     event = 'diskWarn'
                     body = fill_tmpl(event)
 
                     new_toast(diskUsage, f"Free disk space is ends: {diskFree}GB")
-                    send_notify(name, event, body)
+                    send_notify(taskName, event, body)
                 elif diskFree > diskWarn:
                     log.info(f"disk {diskUsage}: {diskFree}GB free")
 
