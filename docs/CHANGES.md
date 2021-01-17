@@ -2,6 +2,14 @@
 
 ------
 
+## [build202101162]
+
+### Fixed
+
+* Ignoring `resendTimeoutM` parameter
+
+
+
 ## [build2021011511]
 
 ### Features
@@ -35,7 +43,7 @@
 * When AppWatch add new section to cfg file he lost all comments
 * Exception if activated only disk check type task. Has no effect on working.
 * Exception from process_inspector have double logging
-* May raise exception if **templates.cfg** is empty. AppWatch didn't check this file on starting. Had error when trying to notify.
+* Can raise exception if **templates.cfg** is empty. AppWatch didn't check this file on starting. Had error when trying to notify.
 
 ### Improvements
 

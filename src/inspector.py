@@ -50,10 +50,10 @@ def shutdown_me(signum, frame, appServerSvc=None):
 
 def send_notify(taskName: str, event: str, body: str):
     try:
-        # decorator?
         now = dtime.datetime.now()
         if taskName not in sendedNotify:
             sendedNotify[taskName] = {}
+
         if event not in sendedNotify[taskName]:
             sendedNotify[taskName][event] = {"dtm": now, "body": body}
         else:
@@ -67,7 +67,9 @@ def send_notify(taskName: str, event: str, body: str):
                 return
 
         log.debug(f"New report of an event {taskName}: {event}")
-        if not notify.send_notify(taskName, event, body):
+        if notify.send_notify(taskName, event, body):  # update
+            sendedNotify[taskName][event] = {"dtm": now, "body": body}
+        else:
             del sendedNotify[taskName][event]
 
     except Exception as e:
