@@ -8,7 +8,8 @@ import json
 from time import sleep
 from threading import Thread
 from subprocess import Popen, PIPE, DEVNULL
-import configparser, logging
+import configparser
+import logging
 from logging.handlers import RotatingFileHandler
 # need for email connector
 from email.mime.text import MIMEText
@@ -17,6 +18,7 @@ import smtplib
 import re
 
 import psutil
+
 
 # import pystray
 import requests
@@ -41,7 +43,7 @@ def sout(msg, clr='white'):
     print(f"{colors[clr]}{msg}\x1b[0m")
 
 if hasattr(sys, "_MEIPASS"):
-    dataDir = sys._MEIPASS + '/'
+    dataDir = sys._MEIPASS + '/'  # pylint: disable=no-member
 else:
     dataDir = './'
 

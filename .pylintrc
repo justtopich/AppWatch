@@ -1,0 +1,19 @@
+[MASTER]
+init-hook="from pylint.config import find_pylintrc; import os, sys; sys.path.append(os.path.join(os.path.dirname(find_pylintrc()), 'src'))"
+
+[BASIC]
+const-naming-style=camelCase
+variable-naming-style=camelCase
+
+[FORMAT]
+max-line-length=120
+
+[LOGGING]
+# use logging-fstring-interpolation
+# logging-format-style=fstr
+
+[DESIGN]
+min-public-methods=1
+
+[MESSAGES CONTROL]
+disable=logging-fstring-interpolation,

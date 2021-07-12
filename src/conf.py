@@ -9,7 +9,11 @@
     logging,
     RotatingFileHandler,
     homeDir)
+    
+from types import FunctionType
 
+
+cfgFileName = "AppWatch.cfg"
 default = {
     "notify": {
         "type": "email",
@@ -155,15 +159,15 @@ def get_svc_params() -> list:
 
 def open_config() -> configparser.RawConfigParser:
     try:
-        open(f"{homeDir}AppWatch.cfg", encoding='utf-8')
+        open(f"{homeDir}{cfgFileName}", encoding='utf-8')
     except IOError:
-        open(f"{homeDir}AppWatch.cfg", 'tw', encoding='utf-8')
+        open(f"{homeDir}{cfgFileName}", 'tw', encoding='utf-8')
 
     config = configparser.RawConfigParser(allow_no_value=True)
     config = lowcase_sections(config)
 
     try:
-        config.read(f"{homeDir}AppWatch.cfg")
+        config.read(f"{homeDir}{cfgFileName}")
     except Exception as e:
         print(f"Fail to read configuration file: {e}")
         sleep(3)
@@ -172,29 +176,16 @@ def open_config() -> configparser.RawConfigParser:
 
 
 def write_section(section: str, params: dict) -> bool:
-    # def lowcaseMe(val: str) -> str:
-    #     return val.lower()
+    try:
+        with open(f'{homeDir}{cfgFileName}', "a") as configFile:
+            configFile.write(f"\n[{section}]\n")
+            for k, v in params.items():
+                configFile.write(f"{k} = {v}\n")
 
-    # def configWrite():
-    #     with open(f'{homeDir}AppWatch.cfg', "w") as configFile:
-    #         config.write(configFile)
-
-    # print(f'Write section {section}')
-    # config.optionxform = str  # позволяет записать параметр сохранив регистр
-    # config.add_section(section)
-    #
-    # for val in params:
-    #     config.set(section, val, params[val])
-    #
-    # config.optionxform = lowcaseMe  # возращаем предопределённый метод назад
-    # configWrite()
-
-    print(f'Write section {section}')
-    with open(f'{homeDir}AppWatch.cfg', "a") as configFile:
-        configFile.write(f"\n[{section}]\n")
-        for k, v in params.items():
-            configFile.write(f"{k} = {v}\n")
-    return True
+        return True
+    except Exception as e:
+        print(f"Can't write to {cfgFileName}: {e}")
+        return False
 
 
 def check_base_sections(config: configparser.RawConfigParser):
@@ -574,6 +565,42 @@ def load_notifier(cfg: dict, log: logging.Logger) -> Notify:
         raise SystemExit(1)
 
 
+def load_event_scripts(cfg: dict) -> dict:
+    def load_script(script: str) -> FunctionType:
+        """
+        Search scripts in path and compile for using in
+        Factory module
+
+        :return: module
+        """
+        fileName, ext = script.split('.')
+
+        if ext != 'py':
+            raise Exception(f"Wrong script extension {ext}")
+
+        try:
+            with open(f'{homeDir}scripts/{script}', encoding='utf-8') as src:
+                scrCode = src.read()
+
+            a = globals()
+            exec(scrCode, globals(), globals())
+            handler = a['handler']
+            return handler
+
+        except ModuleNotFoundError as e:
+            raise Exception(f"No script {fileName}. Try to set full path.")
+        except AttributeError as e:
+            raise Exception(f'Wrong script: {e}')
+        except Exception as e:
+            raise Exception(f'Fail import script: {e}')
+
+    for sec in ['diskTask', 'logTask', 'jobList']:
+        for k, v in cfg['tasks'][sec].items():
+            if config.has_option(k, 'eventScript'):
+                v['eventScript'] = load_script(config.get(k, 'eventScript'))
+    return cfg
+
+
 if __name__ != "__main__":
     try:
         create_dirs([f"{homeDir}{'logs'}"])
@@ -586,5 +613,6 @@ if __name__ != "__main__":
     check_base_sections(config)
     log, console = create_logger(config)
     cfg = verify_config(config, log)
+    cfg = load_event_scripts(cfg)
     templater = Templater(log)
     notify = load_notifier(cfg, log)

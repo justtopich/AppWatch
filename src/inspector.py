@@ -1,3 +1,5 @@
+import logging
+
 from AppWatch import (
     sout,
     platform,
@@ -14,6 +16,10 @@ from AppWatch import (
     __version__,
     dataDir)
 from conf import cfg, log, notify, templater
+
+from types import FunctionType
+from typing import Tuple
+
 
 if platform == 'nt':
     import win32serviceutil
@@ -67,6 +73,7 @@ def send_notify(taskName: str, event: str, body: str):
                 return
 
         log.debug(f"New report of an event {taskName}: {event}")
+
         if notify.send_notify(taskName, event, body):  # update
             sendedNotify[taskName][event] = {"dtm": now, "body": body}
         else:
@@ -234,7 +241,14 @@ def process_inspector():
                         data += restart(job, exePid)
                         body += data
 
-                    send_notify(taskName, "badAnswer", body)
+                    if 'eventScript' in job:
+                        allowSend, body = execute_event_script(log, job['eventScript'], taskName, 'badAnswer', body)
+                    else:
+                        allowSend = True
+
+                    if allowSend:
+                        send_notify(taskName, 'badAnswer', body)
+
                 elif not exePid and alwaysWork:
                     body = templater.tmpl_fill(selfName, 'notFound').replace("{{taskName}}", taskName, -1)
                     data = f"Not found required application {taskName}. Trying to restart\n"
@@ -243,7 +257,15 @@ def process_inspector():
 
                     data += restart(job, exePid)
                     body += data
-                    send_notify(taskName, 'notFound', body)
+
+                    new_toast('log_inspector', 'notFound')
+                    if 'eventScript' in job:
+                        allowSend, body = execute_event_script(log, job['eventScript'], taskName, 'notFound', body)
+                    else:
+                        allowSend = True
+
+                    if allowSend:
+                        send_notify(taskName, 'notFound', body)
 
             sleep(intervalCheckMin)
         except Exception:
@@ -273,9 +295,16 @@ def log_inspector():
                             ev = f"Found log expression {taskName}: {tmplName}"
                             log.warning(ev)
                             body = templater.tmpl_fill(selfName, 'error').replace('{{taskName}}', taskName, -1)
+                            event = 'error'
 
-                            new_toast('log_inspector', ev)
-                            send_notify(taskName, 'error', body)
+                            new_toast('log_inspector', event)
+                            if 'eventScript' in task:
+                                allowSend, body = execute_event_script(log, task['eventScript'], taskName, event, body)
+                            else:
+                                allowSend = True
+
+                            if allowSend:
+                                send_notify(taskName, event, body)
 
                 except FileNotFoundError:
                     log.error(f"Not found log file {taskName}")
@@ -315,14 +344,27 @@ def disk_inspector():
                     body = fill_tmpl(event)
 
                     new_toast(diskUsage, f"Free disk space is critically small: {diskFree}")
-                    send_notify(taskName, event, body)
+                    if 'eventScript' in task:
+                        allowSend, body = execute_event_script(log, task['eventScript'], taskName, event, body)
+                    else:
+                        allowSend = True
+
+                    if allowSend:
+                        send_notify(taskName, event, body)
+
                 elif diskFree < diskWarn:
                     log.warning(f"Free disk space is ends {diskUsage}: {diskFree}GB")
                     event = 'diskWarn'
                     body = fill_tmpl(event)
 
                     new_toast(diskUsage, f"Free disk space is ends: {diskFree}GB")
-                    send_notify(taskName, event, body)
+                    if 'eventScript' in task:
+                        allowSend, body = execute_event_script(log, task['eventScript'], taskName, event, body)
+                    else:
+                        allowSend = True
+
+                    if allowSend:
+                        send_notify(taskName, event, body)
                 elif diskFree > diskWarn:
                     log.info(f"disk {diskUsage}: {diskFree}GB free")
 
@@ -337,6 +379,15 @@ def disk_inspector():
 #     image = Image.open(f'{dataDir}notifier/chat_ava.ico')
 #     icon = pystray.Icon("name", image, "title")
 #     icon.run()
+
+
+def execute_event_script(log: logging.Logger, script: FunctionType, taskName: str,
+                         event: str, body: str) -> Tuple[bool, str]:
+    try:
+        return script(log, taskName, event, body)
+    except Exception as e:
+        log.error(f"Event script: {traceback.format_exc()}")
+        return True, body
 
 
 if __name__ != '__main__':

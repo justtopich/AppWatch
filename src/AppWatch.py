@@ -70,7 +70,8 @@ def svc_init():
                 except Exception as e:
                     log_error(f"Fail shutdown_me: {e}")
 
-            def app_wrapper(self):
+            @staticmethod
+            def app_wrapper():
                 import inspector
 
             def SvcDoRun(self):
@@ -89,14 +90,14 @@ if __name__ == "__main__":
         if len(sys.argv) == 1 and not devMode:
             if platform != 'nt':
                 raise Exception('Show help')
-            else:
-                if homeDir.endswith('system32/'):
-                    homeDir = os.path.dirname(sys.executable) + '/'  # Server 2012 != Win 10
 
-                AppServerSvc = svc_init()
-                servicemanager.Initialize()
-                servicemanager.PrepareToHostSingle(AppServerSvc)
-                servicemanager.StartServiceCtrlDispatcher()
+            if homeDir.endswith('system32/'):
+                homeDir = os.path.dirname(sys.executable) + '/'  # Server 2012 != Win 10
+
+            AppServerSvc = svc_init()
+            servicemanager.Initialize()
+            servicemanager.PrepareToHostSingle(AppServerSvc)
+            servicemanager.StartServiceCtrlDispatcher()
         else:
             if 'install' in sys.argv or 'remove' in sys.argv:
                 AppServerSvc = svc_init()
