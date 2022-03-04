@@ -597,7 +597,9 @@ def load_event_scripts(cfg: dict) -> dict:
     for sec in ['diskTask', 'logTask', 'jobList']:
         for k, v in cfg['tasks'][sec].items():
             if config.has_option(k, 'eventScript'):
-                v['eventScript'] = load_script(config.get(k, 'eventScript'))
+                scriptName = config.get(k, 'eventScript')
+                log.info(f"loading script {scriptName} ({k})")
+                v['eventScript'] = load_script(scriptName)
     return cfg
 
 
