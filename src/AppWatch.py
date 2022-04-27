@@ -15,7 +15,7 @@ def log_error(msg):
 
 
 def svc_init():
-    if platform == 'nt':
+    if PLATFORM == 'nt':
         class WinServerSvc(win32serviceutil.ServiceFramework):
             def __init__(self, args):
                 svcParams = get_svc_params()
@@ -88,7 +88,7 @@ def svc_init():
 if __name__ == "__main__":
     try:
         if len(sys.argv) == 1 and not devMode:
-            if platform != 'nt':
+            if PLATFORM != 'nt':
                 raise Exception('Show help')
 
             if homeDir.endswith('system32/'):
@@ -102,7 +102,7 @@ if __name__ == "__main__":
             if 'install' in sys.argv or 'remove' in sys.argv:
                 AppServerSvc = svc_init()
 
-                if platform == 'nt':
+                if PLATFORM == 'nt':
                     win32serviceutil.HandleCommandLine(AppServerSvc)
                 else:
                     appServerSvc = AppServerSvc()
@@ -159,7 +159,7 @@ if __name__ == "__main__":
                     console.setLevel(10)
                 import inspector
 
-            elif 'deamon' in sys.argv and platform != 'nt':
+            elif 'deamon' in sys.argv and PLATFORM != 'nt':
                 AppServerSvc = svc_init()
                 appServerSvc = AppServerSvc()
                 appServerSvc.SvcDoRun()

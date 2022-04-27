@@ -3,7 +3,7 @@
     re,
     sys, os,
     sleep,
-    platform,
+    PLATFORM,
     traceback,
     configparser,
     logging,

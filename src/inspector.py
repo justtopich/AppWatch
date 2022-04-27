@@ -2,7 +2,7 @@ import logging
 
 from AppWatch import (
     sout,
-    platform,
+    PLATFORM,
     os, sys,
     dtime,
     sleep,
@@ -21,12 +21,12 @@ from types import FunctionType
 from typing import Tuple
 
 
-if platform == 'nt':
+if PLATFORM == 'nt':
     import win32serviceutil
 
 
 def new_toast(title: str, msg: str):
-    if platform != "nt":
+    if PLATFORM != "nt":
         return
     if len(msg) > 255:
         msg = msg[:256]
@@ -100,7 +100,7 @@ def process_inspector():
                     if workDir.lower() == p.info['cwd'].replace('\\', '/', -1).lower():
                         return p.pid
                 else:
-                    if platform == 'nt':
+                    if PLATFORM == 'nt':
                         exePath = f"{exePath}{exe}"
                     else:
                         exePath = exePath[:-1]
@@ -149,7 +149,7 @@ def process_inspector():
             if target:
                 log.info(f"Starting {taskName}")
                 try:
-                    if platform == 'nt':
+                    if PLATFORM == 'nt':
                         os.system(f"start cmd /c {target}")
                     else:
                         os.system(f"command {target} &")
@@ -159,7 +159,7 @@ def process_inspector():
             else:
                 log.info(f"Starting service {job['service']}")
                 try:
-                    if platform == 'nt':
+                    if PLATFORM == 'nt':
                         win32serviceutil.StartService(job['service'])
                     else:
                         os.system(f"systemctl start {job['service']}")
@@ -413,13 +413,17 @@ if __name__ != '__main__':
         ht1 = Thread(target=process_inspector, name='process_inspector')
         ht1.start()
 
-    log.info(f"AppWatch started. Version {__version__}_{platform}")
+    log.info(
+        f"AppWatch started. Version: {__version__}_{PLATFORM}. "
+        f"Python version: {sys.version_info[0]}.{sys.version_info[1]}.{sys.version_info[2]}")
 
     if 'run' in sys.argv:
         signal.signal(signal.SIGINT, shutdown_me)
         signal.signal(signal.SIGTERM, shutdown_me)
-        if platform != 'nt':
+        if PLATFORM != 'nt':
             signal.signal(signal.SIGQUIT, shutdown_me)
+
+        
 
         input()
         while True:

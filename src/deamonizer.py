@@ -166,7 +166,7 @@ class Daemonize(object):
 
             # Initialize syslog.
             # It will correctly work on OS X, Linux and FreeBSD.
-            if sys.platform == "darwin":
+            if sys.PLATFORM == "darwin":
                 syslog_address = "/var/run/syslog"
             else:
                 syslog_address = "/dev/log"

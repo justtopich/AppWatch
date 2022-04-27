@@ -35,4 +35,6 @@ exe = EXE(pyz,
           upx=True,
           upx_exclude=[],
           runtime_tmpdir=None,
-          console=True , version='version.txt')
+          console=True,
+ version='version.txt'
+)

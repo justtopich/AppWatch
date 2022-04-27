@@ -96,11 +96,11 @@ if os.name == "nt":
     import servicemanager
 
     __all__.extend(['win32event', 'win32service', 'win32serviceutil', 'servicemanager'])
-    platform = 'nt'
+    PLATFORM = 'nt'
 else:
     from deamonizer import Daemonize
 
     __all__.append('Daemonize')
-    platform = 'posix'
+    PLATFORM = 'posix'
 
-__all__.append('platform')
+__all__.append('PLATFORM')

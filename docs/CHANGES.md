@@ -8,6 +8,9 @@
 
 * logging using **eventScript**
 
+### Improvements
+
+* updated **__build_pyInst.py** and now worked in linux
 
 
 ## [build20210712]

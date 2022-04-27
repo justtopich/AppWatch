@@ -1,4 +1,3 @@
-from subprocess import call
 from datetime import datetime
 from time import sleep
 import os
@@ -40,16 +39,36 @@ def comile():
 
     # сборка
     try:
-        # pkg_resources.py2_warn только при setuptools 45 и pyinstaller 3.6
-        #     call(f"pyinstaller -F --version-file=version.txt src/{PACKAGE}.py "
-        #          f"--hidden-import=win32timezone "
-        #          f"--hidden-import=pkg_resources.py2_warn "
-        #          f"--clean "
-        #          f"--distpath bin "
-        #          f"--workpath src "
-        #          f"--paths src"
-        #     )
-        os.system(f"pyinstaller -F --clean --workpath src --distpath bin {PACKAGE}.spec")
+        if os.name == "nt":
+            os.system(f"pyinstaller -F --clean --distpath bin {PACKAGE}.spec")
+        else:
+            # pkg_resources.py2_warn только при setuptools 45 и pyinstaller 3.6
+            os.system(
+                 f"pyinstaller -F "
+                 f"src/{PACKAGE}.py "
+                 f"--version-file=version.txt "
+                 f"--hidden-import=win32timezone "
+                 f"--hidden-import=pkg_resources.py2_warn "
+                 f"--clean "
+                 f"--distpath bin "
+                 f"--paths src "
+                 f"--name={PACKAGE} "
+                 f"--add-data=docs/README.md:docs "
+                 f"--add-data=docs/CHANGES.md:docs "
+                 f"--add-data=docs/Connectors.md:docs "
+                 f"--add-data=src/notifier/chat_ava.ico:notifier "
+                 f"--hidden-import=win32timezone "
+                 f"--hidden-import=pkg_resources.py2_warn "
+                 f"--hidden-import=plyer.platforms.win.notification "
+                 f"--exclude-module=dummy_thread "
+                 f"--exclude-module=setuptools "
+                 f"--exclude-module=cryptography "
+                 f"--exclude-module=lib2to3 "
+                 f"--exclude-module=_cffi_backend "
+                 f"--exclude-module=win32ui "
+                 f"--exclude-module=win32trace "
+            )
+        
     except Exception as e:
         input("can't call pyinstaller: %s" % e)
         return
