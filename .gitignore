@@ -1,4 +1,5 @@
 .idea/
+.venv/
 bin/
 build/
 bin-linux-x64/

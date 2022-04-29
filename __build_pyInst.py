@@ -39,35 +39,34 @@ def comile():
 
     # сборка
     try:
-        if os.name == "nt":
-            os.system(f"pyinstaller -F --clean --distpath bin {PACKAGE}.spec")
-        else:
+        # pyinstaller 4 need add -F arg, pyinstaller 5 no need
+        os.system(f"pyinstaller --clean --distpath bin {PACKAGE}.spec")
             # pkg_resources.py2_warn только при setuptools 45 и pyinstaller 3.6
-            os.system(
-                 f"pyinstaller -F "
-                 f"src/{PACKAGE}.py "
-                 f"--version-file=version.txt "
-                 f"--hidden-import=win32timezone "
-                 f"--hidden-import=pkg_resources.py2_warn "
-                 f"--clean "
-                 f"--distpath bin "
-                 f"--paths src "
-                 f"--name={PACKAGE} "
-                 f"--add-data=docs/README.md:docs "
-                 f"--add-data=docs/CHANGES.md:docs "
-                 f"--add-data=docs/Connectors.md:docs "
-                 f"--add-data=src/notifier/chat_ava.ico:notifier "
-                 f"--hidden-import=win32timezone "
-                 f"--hidden-import=pkg_resources.py2_warn "
-                 f"--hidden-import=plyer.platforms.win.notification "
-                 f"--exclude-module=dummy_thread "
-                 f"--exclude-module=setuptools "
-                 f"--exclude-module=cryptography "
-                 f"--exclude-module=lib2to3 "
-                 f"--exclude-module=_cffi_backend "
-                 f"--exclude-module=win32ui "
-                 f"--exclude-module=win32trace "
-            )
+            # os.system(
+                 # f"pyinstaller -F "
+                 # f"src/{PACKAGE}.py "
+                 # f"--version-file=version.txt "
+                 # f"--hidden-import=win32timezone "
+                 # f"--hidden-import=pkg_resources.py2_warn "
+                 # f"--clean "
+                 # f"--distpath bin "
+                 # f"--paths src "
+                 # f"--name={PACKAGE} "
+                 # f"--add-data=docs/README.md:docs "
+                 # f"--add-data=docs/CHANGES.md:docs "
+                 # f"--add-data=docs/Connectors.md:docs "
+                 # f"--add-data=src/notifier/chat_ava.ico:notifier "
+                 # f"--hidden-import=win32timezone "
+                 # f"--hidden-import=pkg_resources.py2_warn "
+                 # f"--hidden-import=plyer.platforms.win.notification "
+                 # f"--exclude-module=dummy_thread "
+                 # f"--exclude-module=setuptools "
+                 # f"--exclude-module=cryptography "
+                 # f"--exclude-module=lib2to3 "
+                 # f"--exclude-module=_cffi_backend "
+                 # f"--exclude-module=win32ui "
+                 # f"--exclude-module=win32trace "
+            # )
         
     except Exception as e:
         input("can't call pyinstaller: %s" % e)
