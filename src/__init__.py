@@ -22,10 +22,11 @@ import psutil
 
 # import pystray
 import requests
-from plyer import notification
+# from plyer import notification
+from windowstoast import Toast as notification
 
 
-__version__ = "2022.03.03.12"
+__version__ = "2022.07.13.16"
 
 
 def sout(msg, clr='white'):
@@ -41,6 +42,7 @@ def sout(msg, clr='white'):
         'red': '\x1b[0;30;31m'}
 
     print(f"{colors[clr]}{msg}\x1b[0m")
+
 
 if hasattr(sys, "_MEIPASS"):
     dataDir = sys._MEIPASS + '/'  # pylint: disable=no-member

@@ -380,16 +380,29 @@ def verify_config(config: configparser.RawConfigParser, log: logging.Logger) -> 
                     jobListTmp['exePath'] = config.get(task, "exePath").replace('\\', '/', -1)
                     if not jobListTmp['exePath'].endswith('/'):
                         jobListTmp['exePath'] = jobListTmp['exePath'] + '/'
+                    
+                    if not os.path.exists(jobListTmp['exePath']):
+                        raise FileNotFoundError(f"Wrong exePath in task {task}. You sure that it's path, not a file?")
+                    if os.path.isfile(jobListTmp['exePath']):
+                        raise NotADirectoryError(f"Wrong exePath in task {task}. You sure that it's path, not a file?")
+                    
                 else:
+                    log.warning(f"no parameter exePath in task {task}")
                     jobListTmp['exePath'] = None
 
                 if config.has_option(task, 'workdir'):
                     jobListTmp['workDir'] = config.get(task, "workdir").replace('\\', '/', -1)
                     if not jobListTmp['workDir'].endswith('/'):
                         jobListTmp['workDir'] = jobListTmp['workDir'] + '/'
+                    
+                    if not os.path.exists(jobListTmp['workDir']):
+                        raise FileNotFoundError(f"Wrong workDir in task {task}. You sure that it's path, not a file?")
+                    if os.path.isfile(jobListTmp['workDir']):
+                        raise NotADirectoryError(f"Wrong workDir in task {task}. You sure that it's path, not a file?")
 
                     jobListTmp['checkPath'] = jobListTmp['workDir']
                 else:
+                    log.warning(f"no parameter workDir in task {task}. Using exePath for searching exe")
                     jobListTmp['workDir'] = None
                     jobListTmp['checkPath'] = jobListTmp['exePath']
 

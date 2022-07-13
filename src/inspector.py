@@ -1,4 +1,5 @@
 import logging
+import uuid
 
 from AppWatch import (
     sout,
@@ -32,13 +33,21 @@ def new_toast(title: str, msg: str):
         msg = msg[:256]
 
     try:
-        notification.notify(
-            title=title,
-            message=msg,
-            app_name='AppWatch',
-            app_icon=f'{dataDir}notifier/chat_ava.ico',
-            timeout=10
-        )
+        # plyer using
+        # notification.notify(
+        #     title=title,
+        #     message=msg,
+        #     app_name='AppWatch',
+        #     timeout=10
+        # )
+        
+        toast = notification(
+            App_ID='AppWatch',
+            Notification_ID=uuid.uuid4(),
+            Duration='long')
+        toast.add_text(text=title)
+        toast.add_text(text=msg)
+        toast.show()
     except Exception as e:
         log.error(f"Fail to show windows notification: {e}")
 
@@ -85,7 +94,7 @@ def send_notify(taskName: str, event: str, body: str):
 
 
 def process_inspector():
-    def get_pid(exe: str, exePath: str, workDir: str=None) -> int:
+    def get_pid(exe: str, exePath: str, workDir: str = None) -> int:
         # if give workDir, will check only it
 
         for p in psutil.process_iter(["name", 'exe', 'cwd']):
@@ -94,6 +103,9 @@ def process_inspector():
 
             if exe == p.info['name'].lower():
                 if workDir:
+                    if not p.info['cwd']:
+                        raise psutil.AccessDenied("Get process working directory")
+                    
                     if not p.info['cwd'].endswith('/'):
                         p.info['cwd'] = f"{p.info['cwd']}/"
 
@@ -108,7 +120,7 @@ def process_inspector():
                     if exePath.lower() == p.info['exe'].replace('\\', '/', -1).lower():
                         return p.pid
 
-    def restart(job: dict, exePid: int=None, killRecursive: bool=False) -> str:
+    def restart(job: dict, exePid: int = None, killRecursive: bool = False) -> str:
         data = ""
         status = 0
         failList[taskName]['attemp'] += 1
@@ -258,7 +270,7 @@ def process_inspector():
                     data += restart(job, exePid)
                     body += data
 
-                    new_toast('log_inspector', 'notFound')
+                    # new_toast('log_inspector', 'notFound')
                     if 'eventScript' in job:
                         allowSend, body = execute_event_script(log, job['eventScript'], taskName, 'notFound', body)
                     else:
@@ -391,6 +403,15 @@ def execute_event_script(log: logging.Logger, script: FunctionType, taskName: st
 
 
 if __name__ != '__main__':
+    for p in psutil.process_iter():
+        if p.pid != os.getpid():
+            try:
+                p.cwd()
+            except psutil.AccessDenied:
+                log.warning("Low access privileges. Some functions can't working.")
+            finally:
+                break
+    
     resendTime = dtime.timedelta(minutes=cfg['notify']['resendTime'])
     localName = cfg['notify']['localName']
     localIp = cfg['notify']['localIp']
@@ -422,8 +443,6 @@ if __name__ != '__main__':
         signal.signal(signal.SIGTERM, shutdown_me)
         if PLATFORM != 'nt':
             signal.signal(signal.SIGQUIT, shutdown_me)
-
-        
 
         input()
         while True:
