@@ -18,15 +18,11 @@ import smtplib
 import re
 
 import psutil
-
-
-# import pystray
 import requests
 # from plyer import notification
-from windowstoast import Toast as notification
 
 
-__version__ = "2022.07.13.16"
+__version__ = "2022.07.14.18"
 
 
 def sout(msg, clr='white'):
@@ -43,6 +39,7 @@ def sout(msg, clr='white'):
 
     print(f"{colors[clr]}{msg}\x1b[0m")
 
+notification = None
 
 if hasattr(sys, "_MEIPASS"):
     dataDir = sys._MEIPASS + '/'  # pylint: disable=no-member
@@ -82,22 +79,29 @@ PIDFile = {{pid}}
 WantedBy=multi-user.target
 """
 
+
 __all__ = [
     'dtime', 'os', 'sys', 'socket', 'unixSvcFile', 'traceback', 'signal',
     'shutil', 'sleep', 'Thread', 'Popen', 'PIPE', 'DEVNULL', 'configparser', 'json',
     'logging', 'RotatingFileHandler', 'MIMEText', 'MIMEMultipart', 'smtplib', 're',
 
-    'requests', 'notification', 'psutil',
+    'requests', 'psutil', 'notification',
 
     '__version__', 'homeDir', 'dataDir', 'appName', 'sout']
+
 
 if os.name == "nt":
     import win32event
     import win32service
     import win32serviceutil
     import servicemanager
+    from windowstoast import Toast as notification
 
-    __all__.extend(['win32event', 'win32service', 'win32serviceutil', 'servicemanager'])
+    __all__.extend([
+        'win32event',
+        'win32service',
+        'win32serviceutil',
+        'servicemanager'])
     PLATFORM = 'nt'
 else:
     from deamonizer import Daemonize

@@ -1,4 +1,4 @@
-pywin32>=225; os_name == 'nt'
-requests>=2.19.1
-psutil>=5.7.0
-plyer>=1.4.3
+pywin32>=301; os_name == 'nt'
+requests>=2.26.0
+psutil>=5.9.1
+windowstoast>=0.0.3; os_name == 'nt'
